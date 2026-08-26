@@ -1,0 +1,49 @@
+/**
+ * The real worksheet layout for a poker table, as designed:
+ *
+ *  - players-info: row-based registry. A1/B1 headers ("Player name"/
+ *    "Player email"), one player per row below.
+ *  - net-results: A1/B1 headers ("Player name"/"Total"). Player rows
+ *    are formula-linked to players-info (e.g. `=players-info!A3`),
+ *    grown in lockstep with it by lib/pokerActions.ts#addPlayer. The
+ *    Total formula itself is still TBD — left blank per row for now.
+ *  - session-log: A1/B1/C1 = "Date"/"ratio"/"Buy-in(₹)". Every player
+ *    gets a 2-column block appended to the right (row 1 = their name,
+ *    merged across the pair and formula-linked to players-info; row 2
+ *    = "Buy-ins(#)"/"Final chips" sub-headers) — also grown by
+ *    addPlayer, since it's structural (insert + merge), not a plain
+ *    value write.
+ *  - sum-check: A1/B1/C1/D1 = "date"/"buy-ins"/"cash-outs"/
+ *    "deviation". Formulas TBD.
+ *  - groups-info, leaderboard: left blank — format not defined yet.
+ *
+ * This is NOT built on sheet-ui's Config-tab engine (configEngine.ts/
+ * DynamicScreen.tsx) — there's no Config tab, and the real actions
+ * here (like adding a player) are structural sheet operations, not
+ * the value-only writes that engine knows how to express. This
+ * project has its own screens instead (see App.tsx, lib/pokerActions.ts).
+ */
+import type { SheetSeed } from './appSheet';
+
+export const APP_NAME = 'poker-ledger';
+export const DEFAULT_SHEET_NAME = 'Poker Table';
+
+export const TABS = {
+  playersInfo: 'players-info',
+  groupsInfo: 'groups-info',
+  netResults: 'net-results',
+  sessionLog: 'session-log',
+  leaderboard: 'leaderboard',
+  sumCheck: 'sum-check',
+} as const;
+
+export const pokerLedgerSeed: SheetSeed = {
+  tabs: [TABS.playersInfo, TABS.groupsInfo, TABS.netResults, TABS.sessionLog, TABS.leaderboard, TABS.sumCheck],
+  values: [
+    { range: `${TABS.playersInfo}!A1:B1`, values: [['Player name', 'Player email']] },
+    { range: `${TABS.netResults}!A1:B1`, values: [['Player name', 'Total']] },
+    { range: `${TABS.sessionLog}!A1:C1`, values: [['Date', 'ratio', 'Buy-in(₹)']] },
+    { range: `${TABS.sumCheck}!A1:D1`, values: [['date', 'buy-ins', 'cash-outs', 'deviation']] },
+  ],
+  listColumns: [],
+};
