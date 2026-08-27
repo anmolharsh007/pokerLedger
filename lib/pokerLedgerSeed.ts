@@ -15,6 +15,9 @@
  *    value write.
  *  - sum-check: A1/B1/C1/D1 = "date"/"buy-ins"/"cash-outs"/
  *    "deviation". Formulas TBD.
+ *  - TableInfo: label/value pairs down column A/B — A1="title" (B1 =
+ *    the table's name, not auto-filled yet), A2="Usual buy-in (₹)",
+ *    A3="Usual buy-in (chips)" (B2/B3 left blank, filled in later).
  *  - groups-info, leaderboard: left blank — format not defined yet.
  *
  * This is NOT built on sheet-ui's Config-tab engine (configEngine.ts/
@@ -35,15 +38,22 @@ export const TABS = {
   sessionLog: 'session-log',
   leaderboard: 'leaderboard',
   sumCheck: 'sum-check',
+  tableInfo: 'TableInfo',
 } as const;
 
 export const pokerLedgerSeed: SheetSeed = {
-  tabs: [TABS.playersInfo, TABS.groupsInfo, TABS.netResults, TABS.sessionLog, TABS.leaderboard, TABS.sumCheck],
+  tabs: [TABS.playersInfo, TABS.groupsInfo, TABS.netResults, TABS.sessionLog, TABS.leaderboard, TABS.sumCheck, TABS.tableInfo],
   values: [
     { range: `${TABS.playersInfo}!A1:B1`, values: [['Player name', 'Player email']] },
     { range: `${TABS.netResults}!A1:B1`, values: [['Player name', 'Total']] },
     { range: `${TABS.sessionLog}!A1:C1`, values: [['Date', 'ratio', 'Buy-in(₹)']] },
     { range: `${TABS.sumCheck}!A1:D1`, values: [['date', 'buy-ins', 'cash-outs', 'deviation']] },
+    { range: `${TABS.tableInfo}!A1:A3`, values: [['title'], ['Usual buy-in (₹)'], ['Usual buy-in (chips)']] },
   ],
-  listColumns: [],
+  // The Drive file itself is now named Table<ID>.xlsx (an internal
+  // identifier, not the human name — see App.tsx#handleCreateTable),
+  // so the home screen's table list shows that as the bold name; this
+  // pulls the actual title (TableInfo!B1) back in as the summary line
+  // underneath so it's still readable there.
+  listColumns: [{ label: 'Title', cell: `${TABS.tableInfo}!B1` }],
 };

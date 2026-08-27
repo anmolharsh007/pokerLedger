@@ -16,7 +16,7 @@ the leaderboard worksheet are still undesigned.
 
 ## Worksheet layout (`lib/pokerLedgerSeed.ts`)
 
-Every new table gets 6 tabs:
+Every new table gets 7 tabs:
 
 - **players-info** — row-based registry. `A1`/`B1` = "Player name"/
   "Player email" headers, one player per row below.
@@ -29,6 +29,10 @@ Every new table gets 6 tabs:
   "Buy-ins(#)"/"Final chips" sub-headers.
 - **sum-check** — `A1:D1` = "date"/"buy-ins"/"cash-outs"/"deviation".
   Formulas: TBD.
+- **TableInfo** — label/value pairs down column A/B: `A1`="title"
+  (`B1` = the table's name, not auto-filled yet), `A2`="Usual buy-in
+  (₹)", `A3`="Usual buy-in (chips)" (`B2`/`B3` left blank, filled in
+  later).
 - **groups-info**, **leaderboard** — created blank; format not
   defined yet.
 

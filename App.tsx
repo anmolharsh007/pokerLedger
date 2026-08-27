@@ -2,11 +2,12 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import TableScreen from './components/TableScreen';
+import TableHome from './components/TableHome';
 import { createAppSheet, listAppSheets } from './lib/appSheet';
 import { GoogleAuthProvider } from './lib/auth/googleAuthProvider';
 import type { AuthUser } from './lib/auth/types';
 import { batchGetValues } from './lib/googleSheetsApi';
+import { PokerLedgerService } from './lib/pokerActions';
 import { APP_NAME, DEFAULT_SHEET_NAME, pokerLedgerSeed } from './lib/pokerLedgerSeed';
 import type { LinkedSheet } from './lib/sheetRegistry';
 
@@ -108,11 +109,19 @@ export default function App() {
     setTablesError(null);
     try {
       const accessToken = await auth.getAccessToken();
+      // The Drive file itself is named Table<ID>.xlsx — not the
+      // human-typed name, which lives in TableInfo!B1 instead (and in
+      // the local registry's `name`, used for the table list below).
+      const tableId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       const { spreadsheetId } = await createAppSheet(user.id, accessToken, {
         appName: APP_NAME,
-        sheetName: name,
+        sheetName: `Table${tableId}.xlsx`,
         seed: pokerLedgerSeed,
       });
+      // The seed only writes the "title" label into TableInfo!A1, not
+      // the actual name into B1 — that has to happen here, once we
+      // know the real spreadsheetId.
+      await new PokerLedgerService(spreadsheetId).setTableTitle(name, accessToken);
       setShowNewTableForm(false);
       setNewTableName('');
       await loadTables();
@@ -158,7 +167,7 @@ export default function App() {
             <Text style={styles.signOutText}>Sign out</Text>
           </Pressable>
         </View>
-        <TableScreen spreadsheetId={selectedSpreadsheetId} getAccessToken={() => auth.getAccessToken()} />
+        <TableHome spreadsheetId={selectedSpreadsheetId} getAccessToken={() => auth.getAccessToken()} />
         <StatusBar style="auto" />
       </View>
     );

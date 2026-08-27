@@ -5,38 +5,31 @@
  * lib/pokerActions.ts#addPlayer end to end: players-info gets a new
  * row, net-results a formula-linked row, session-log a new merged
  * 2-column block.
+ *
+ * Doesn't fetch its own roster — all worksheet data is read once,
+ * when the table is opened (TableHome.tsx's load()), and handed down
+ * as props. After a mutation (adding a player) this calls `onChanged`
+ * so the parent re-reads from the sheet, rather than re-fetching here
+ * itself.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { addPlayer, listPlayers, type Player } from '../lib/pokerActions';
+import { PokerLedgerService, type Player } from '../lib/pokerActions';
 
 type Props = {
   spreadsheetId: string;
   getAccessToken: () => Promise<string>;
+  players: Player[];
+  onChanged: () => void | Promise<void>;
 };
 
-export default function TableScreen({ spreadsheetId, getAccessToken }: Props) {
-  const [players, setPlayers] = useState<Player[] | null>(null);
+export default function TableScreen({ spreadsheetId, getAccessToken, players, onChanged }: Props) {
+  const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [adding, setAdding] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const accessToken = await getAccessToken();
-      const roster = await listPlayers(spreadsheetId, accessToken);
-      setPlayers(roster);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [spreadsheetId, getAccessToken]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   const handleAddPlayer = async () => {
     if (!name.trim()) return;
@@ -44,10 +37,10 @@ export default function TableScreen({ spreadsheetId, getAccessToken }: Props) {
     setError(null);
     try {
       const accessToken = await getAccessToken();
-      await addPlayer(spreadsheetId, accessToken, name.trim(), email.trim());
+      await service.addPlayer(name.trim(), email.trim(), accessToken);
       setName('');
       setEmail('');
-      await load();
+      await onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -55,28 +48,15 @@ export default function TableScreen({ spreadsheetId, getAccessToken }: Props) {
     }
   };
 
-  if (error) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{error}</Text>
-        <Pressable style={styles.primaryBtn} onPress={load}>
-          <Text style={styles.primaryBtnText}>Retry</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (players === null) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
-
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.sectionTitle}>Players</Text>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={styles.headerRow}>
+        <Text style={styles.sectionTitle}>Players</Text>
+        <Pressable style={styles.refreshBtn} onPress={onChanged}>
+          <Text style={styles.refreshBtnText}>⟳</Text>
+        </Pressable>
+      </View>
       {players.length === 0 ? (
         <Text style={styles.empty}>No players yet.</Text>
       ) : (
@@ -106,9 +86,11 @@ export default function TableScreen({ spreadsheetId, getAccessToken }: Props) {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   content: { padding: 20, gap: 12 },
   error: { color: '#c00', textAlign: 'center', marginBottom: 12 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  refreshBtn: { paddingVertical: 4, paddingHorizontal: 8 },
+  refreshBtnText: { color: '#2f95dc', fontWeight: '700', fontSize: 18 },
   sectionTitle: { fontSize: 15, fontWeight: '700', opacity: 0.6, marginTop: 8 },
   empty: { opacity: 0.6, textAlign: 'center', marginVertical: 12 },
   playerRow: {
