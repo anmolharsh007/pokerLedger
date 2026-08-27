@@ -480,6 +480,37 @@ export class PokerLedgerService {
     await this.writeValues(values, accessToken);
   }
 
+  /**
+   * Edits an existing group: finds its column by its current title
+   * (`oldTitle`), overwrites the title and member rows with the new
+   * selection. If the new selection is shorter than the old one, the
+   * now-unused rows below it are cleared (blank), not left with stale
+   * members.
+   */
+  async updateGroup(oldTitle: string, newTitle: string, memberNames: string[], accessToken: string): Promise<void> {
+    const headerRow = await this.readRange(TABS.groupsInfo, 'A1:ZZ1', accessToken);
+    const colIndex = headerRow[0]?.findIndex((v) => (v ?? '').trim() === oldTitle) ?? -1;
+    if (colIndex === -1) throw new Error(`Group "${oldTitle}" not found`);
+    const colLetter = PokerLedgerService.colToLetter(colIndex);
+
+    const existingMembers = await this.readRange(TABS.groupsInfo, `${colLetter}2:${colLetter}200`, accessToken);
+    const roster = await this.listPlayers(accessToken);
+    const q = PokerLedgerService.quoteSheet;
+
+    const values: Array<ValueV<unknown>> = [{ value: newTitle, sheetData: new SheetData(1, colLetter, TABS.groupsInfo) }];
+    const rowCount = Math.max(existingMembers.length, memberNames.length);
+    for (let i = 0; i < rowCount; i++) {
+      const name = memberNames[i];
+      const player = name ? roster.find((p) => p.name === name) : undefined;
+      values.push({
+        value: player ? `=${q(TABS.playersInfo)}!A${player.row}` : '',
+        sheetData: new SheetData(2 + i, colLetter, TABS.groupsInfo),
+      });
+    }
+
+    await this.writeValues(values, accessToken);
+  }
+
   /** Reads groups-info: one group per column (its name in row 1, members — formula-linked to players-info — below). */
   async listGroups(accessToken: string): Promise<GroupInfo[]> {
     const rows = await this.readRange(TABS.groupsInfo, 'A1:ZZ200', accessToken);
