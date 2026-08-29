@@ -13,9 +13,15 @@
  * itself.
  */
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import Button from './ui/Button';
+import Card from './ui/Card';
+import IconButton from './ui/IconButton';
+import TextField from './ui/TextField';
 import { PokerLedgerService, type Player } from '../lib/pokerActions';
+import { useTheme } from '../theme/ThemeProvider';
+import type { Theme } from '../theme/tokens';
 
 type Props = {
   spreadsheetId: string;
@@ -25,6 +31,8 @@ type Props = {
 };
 
 export default function TableScreen({ spreadsheetId, getAccessToken, players, onChanged }: Props) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -53,71 +61,41 @@ export default function TableScreen({ spreadsheetId, getAccessToken, players, on
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.headerRow}>
         <Text style={styles.sectionTitle}>Players</Text>
-        <Pressable style={styles.refreshBtn} onPress={onChanged}>
-          <Text style={styles.refreshBtnText}>⟳</Text>
-        </Pressable>
+        <IconButton icon="⟳" onPress={onChanged} />
       </View>
       {players.length === 0 ? (
         <Text style={styles.empty}>No players yet.</Text>
       ) : (
         players.map((p) => (
-          <View key={p.row} style={styles.playerRow}>
+          <Card key={p.row} style={styles.playerRow}>
             <Text style={styles.playerName}>{p.name}</Text>
             <Text style={styles.playerEmail}>{p.email || '—'}</Text>
-          </View>
+          </Card>
         ))
       )}
 
       <Text style={styles.sectionTitle}>Add Player</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" autoCapitalize="words" />
-      <TextInput
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-        placeholder="Email (optional)"
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      <Pressable style={styles.primaryBtn} disabled={adding || !name.trim()} onPress={handleAddPlayer}>
-        {adding ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Add Player</Text>}
-      </Pressable>
+      <TextField value={name} onChangeText={setName} placeholder="Name" autoCapitalize="words" />
+      <TextField value={email} onChangeText={setEmail} placeholder="Email (optional)" autoCapitalize="none" keyboardType="email-address" />
+      <Button label="Add Player" loading={adding} disabled={!name.trim()} onPress={handleAddPlayer} />
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: 20, gap: 12 },
-  error: { color: '#c00', textAlign: 'center', marginBottom: 12 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  refreshBtn: { paddingVertical: 4, paddingHorizontal: 8 },
-  refreshBtnText: { color: '#2f95dc', fontWeight: '700', fontSize: 18 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', opacity: 0.6, marginTop: 8 },
-  empty: { opacity: 0.6, textAlign: 'center', marginVertical: 12 },
-  playerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#f4f4f4',
-    borderRadius: 10,
-  },
-  playerName: { fontSize: 16, fontWeight: '700' },
-  playerEmail: { fontSize: 13, opacity: 0.6 },
-  input: {
-    fontSize: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  primaryBtn: {
-    backgroundColor: '#2f95dc',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    content: { padding: 20, gap: 12 },
+    error: { color: theme.colors.danger, textAlign: 'center', marginBottom: 12 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    sectionTitle: { fontSize: theme.font.size.md, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary, marginTop: 8 },
+    empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
+    playerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+    },
+    playerName: { fontSize: theme.font.size.md, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
+    playerEmail: { fontSize: theme.font.size.sm, color: theme.colors.textSecondary },
+  });

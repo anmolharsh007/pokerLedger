@@ -1,7 +1,14 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import Button from './components/ui/Button';
+import CardButton from './components/ui/CardButton';
+import StyleVariantToggle from './components/ui/StyleVariantToggle';
+import TextField from './components/ui/TextField';
+import ThemeToggle from './components/ui/ThemeToggle';
+import StaticPreview from './components/dev/StaticPreview';
 import TableHome from './components/TableHome';
 import { createAppSheet, listAppSheets } from './lib/appSheet';
 import { GoogleAuthProvider } from './lib/auth/googleAuthProvider';
@@ -10,10 +17,28 @@ import { batchGetValues } from './lib/googleSheetsApi';
 import { PokerLedgerService } from './lib/pokerActions';
 import { APP_NAME, DEFAULT_SHEET_NAME, pokerLedgerSeed } from './lib/pokerLedgerSeed';
 import type { LinkedSheet } from './lib/sheetRegistry';
+import { cardTintFor } from './theme/cardTints';
+import { ThemeProvider, useStyleVariant, useTheme } from './theme/ThemeProvider';
+import type { Theme } from './theme/tokens';
 
 const auth = new GoogleAuthProvider();
 
 export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
+function AppContent() {
+  const theme = useTheme();
+  const styleVariant = useStyleVariant();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Bypasses sign-in/the Sheets backend entirely — see components/dev/StaticPreview.tsx.
+  const [staticPreview, setStaticPreview] = useState(false);
+
   const [user, setUser] = useState<AuthUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
@@ -133,201 +158,219 @@ export default function App() {
     }
   };
 
+  if (staticPreview) {
+    return <StaticPreview onExit={() => setStaticPreview(false)} />;
+  }
+
   if (checkingSession) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-        <StatusBar style="auto" />
-      </View>
+      <LinearGradient colors={theme.gradients.background} style={styles.center}>
+        <ActivityIndicator color={theme.colors.accent} />
+        {/* Reachable even if the session check itself is what's hanging/broken. */}
+        <Pressable onPress={() => setStaticPreview(true)}>
+          <Text style={styles.staticPreviewLink}>Static preview (no sign-in)</Text>
+        </Pressable>
+        <StatusBar style={theme.statusBarStyle} />
+      </LinearGradient>
     );
   }
 
   if (!user) {
     return (
-      <View style={styles.center}>
+      <LinearGradient colors={theme.gradients.background} style={styles.center}>
+        <View style={[styles.themeToggleFloating, styles.headerActions]}>
+          <ThemeToggle />
+          <StyleVariantToggle />
+        </View>
         <Text style={styles.title}>Poker Ledger</Text>
         <Text style={styles.subtitle}>Sign in to load your tables.</Text>
-        <Pressable style={styles.primaryBtn} disabled={signingIn} onPress={handleSignIn}>
-          {signingIn ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Sign in with Google</Text>}
-        </Pressable>
+        <Button label="Sign in with Google" onPress={handleSignIn} loading={signingIn} style={styles.signInBtn} />
         {signInMessage ? <Text style={styles.error}>{signInMessage}</Text> : null}
-        <StatusBar style="auto" />
-      </View>
+        <Pressable onPress={() => setStaticPreview(true)}>
+          <Text style={styles.staticPreviewLink}>Static preview (no sign-in)</Text>
+        </Pressable>
+        <StatusBar style={theme.statusBarStyle} />
+      </LinearGradient>
     );
   }
 
   if (selectedSpreadsheetId) {
     return (
-      <View style={styles.container}>
+      <LinearGradient colors={theme.gradients.background} style={styles.container}>
         <View style={styles.header}>
           <Pressable onPress={() => setSelectedSpreadsheetId(null)}>
             <Text style={styles.backText}>‹ Tables</Text>
           </Pressable>
-          <Pressable onPress={handleSignOut}>
-            <Text style={styles.signOutText}>Sign out</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <ThemeToggle />
+            <StyleVariantToggle />
+            <Pressable onPress={handleSignOut}>
+              <Text style={styles.signOutText}>Sign out</Text>
+            </Pressable>
+          </View>
         </View>
         <TableHome spreadsheetId={selectedSpreadsheetId} getAccessToken={() => auth.getAccessToken()} />
-        <StatusBar style="auto" />
-      </View>
+        <StatusBar style={theme.statusBarStyle} />
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <LinearGradient colors={theme.gradients.background} style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{user.displayName || user.email || 'Poker Ledger'}</Text>
-        <Pressable onPress={handleSignOut}>
-          <Text style={styles.signOutText}>Sign out</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <ThemeToggle />
+          <StyleVariantToggle />
+          <Pressable onPress={handleSignOut}>
+            <Text style={styles.signOutText}>Sign out</Text>
+          </Pressable>
+        </View>
       </View>
 
       {tablesError ? (
         <View style={styles.center}>
           <Text style={styles.error}>{tablesError}</Text>
-          <Pressable style={styles.primaryBtn} onPress={loadTables}>
-            <Text style={styles.primaryBtnText}>Retry</Text>
-          </Pressable>
+          <Button label="Retry" onPress={loadTables} style={styles.retryBtn} />
         </View>
       ) : tables === null ? (
         <View style={styles.center}>
-          <ActivityIndicator />
+          <ActivityIndicator color={theme.colors.accent} />
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           {tables.length === 0 ? (
             <Text style={styles.empty}>No tables yet.</Text>
           ) : (
-            tables.map((table) => (
-              <Pressable key={table.id} style={styles.tableRow} onPress={() => setSelectedSpreadsheetId(table.spreadsheetId)}>
-                <Text style={styles.tableName}>{table.name}</Text>
-                {(tableSummaries[table.spreadsheetId] ?? []).length > 0 ? (
-                  <Text style={styles.tableSummary}>{tableSummaries[table.spreadsheetId].join(' · ')}</Text>
-                ) : null}
-              </Pressable>
-            ))
+            <View style={[styles.tableGrid, styleVariant === 'C' && styles.gridRowGapForBadges]}>
+              {tables.map((table, i) => (
+                <CardButton
+                  key={table.id}
+                  onPress={() => setSelectedSpreadsheetId(table.spreadsheetId)}
+                  tint={cardTintFor(i)}
+                  badge="TABLE"
+                  style={styles.tableCard}>
+                  <Text style={styles.tableCardIcon}>♠</Text>
+                  <View style={styles.tableCardBody}>
+                    <Text style={styles.tableCardName} numberOfLines={2}>
+                      {table.name}
+                    </Text>
+                    {(tableSummaries[table.spreadsheetId] ?? []).length > 0 ? (
+                      <Text style={styles.tableCardSummary} numberOfLines={2}>
+                        {tableSummaries[table.spreadsheetId].join(' · ')}
+                      </Text>
+                    ) : null}
+                  </View>
+                </CardButton>
+              ))}
+            </View>
           )}
 
           {showNewTableForm ? (
             <View style={styles.newTableForm}>
-              <TextInput
-                style={styles.input}
+              <TextField
                 value={newTableName}
                 onChangeText={setNewTableName}
                 placeholder={tables.length === 0 ? DEFAULT_SHEET_NAME : 'New table name'}
                 autoFocus
               />
               <View style={styles.newTableActions}>
-                <Pressable
-                  style={styles.primaryBtn}
+                <Button
+                  label="Create"
+                  loading={creatingTable}
+                  onPress={() => handleCreateTable(newTableName.trim() || DEFAULT_SHEET_NAME)}
+                  style={styles.flexBtn}
+                />
+                <Button
+                  label="Cancel"
+                  variant="secondary"
                   disabled={creatingTable}
-                  onPress={() => handleCreateTable(newTableName.trim() || DEFAULT_SHEET_NAME)}>
-                  {creatingTable ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create</Text>}
-                </Pressable>
-                <Pressable style={styles.secondaryBtn} disabled={creatingTable} onPress={() => setShowNewTableForm(false)}>
-                  <Text style={styles.secondaryBtnText}>Cancel</Text>
-                </Pressable>
+                  onPress={() => setShowNewTableForm(false)}
+                  style={styles.flexBtn}
+                />
               </View>
             </View>
           ) : (
-            <Pressable style={styles.primaryBtn} onPress={() => setShowNewTableForm(true)}>
-              <Text style={styles.primaryBtnText}>{tables.length === 0 ? 'Create your first table' : '+ New Table'}</Text>
-            </Pressable>
+            <Button
+              label={tables.length === 0 ? 'Create your first table' : '+ New Table'}
+              onPress={() => setShowNewTableForm(true)}
+            />
           )}
         </ScrollView>
       )}
 
-      <StatusBar style="auto" />
-    </View>
+      <StatusBar style={theme.statusBarStyle} />
+    </LinearGradient>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    paddingTop: 60,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    gap: 16,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  subtitle: {
-    fontSize: 15,
-    opacity: 0.65,
-    textAlign: 'center',
-  },
-  backText: {
-    fontSize: 16,
-    color: '#2f95dc',
-    fontWeight: '600',
-  },
-  primaryBtn: {
-    backgroundColor: '#2f95dc',
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  primaryBtnText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  secondaryBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  secondaryBtnText: {
-    color: '#666',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  signOutText: {
-    color: '#d33',
-    fontWeight: '600',
-  },
-  error: {
-    color: '#c00',
-    textAlign: 'center',
-  },
-  list: { padding: 20, gap: 12 },
-  empty: { opacity: 0.6, textAlign: 'center', marginTop: 24 },
-  tableRow: {
-    backgroundColor: '#f4f4f4',
-    borderRadius: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 4,
-  },
-  tableName: { fontSize: 17, fontWeight: '700' },
-  tableSummary: { fontSize: 13, opacity: 0.6 },
-  newTableForm: { gap: 10 },
-  newTableActions: { flexDirection: 'row', gap: 10 },
-  input: {
-    fontSize: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+      paddingTop: 60,
+    },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      gap: 16,
+      backgroundColor: theme.colors.background,
+    },
+    themeToggleFloating: { position: 'absolute', top: 60, right: 20 },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingBottom: 16,
+      gap: 12,
+    },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    title: {
+      fontSize: theme.font.size.xl,
+      fontWeight: theme.font.weight.bold,
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      fontSize: theme.font.size.md,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
+    backText: {
+      fontSize: theme.font.size.lg,
+      color: theme.colors.accent,
+      fontWeight: theme.font.weight.bold,
+    },
+    signInBtn: { minWidth: 220 },
+    staticPreviewLink: { fontSize: theme.font.size.xs, color: theme.colors.textSecondary, textDecorationLine: 'underline' },
+    retryBtn: { minWidth: 160 },
+    signOutText: {
+      color: theme.colors.danger,
+      fontWeight: theme.font.weight.bold,
+    },
+    error: { color: theme.colors.danger, textAlign: 'center' },
+    list: { padding: 20, gap: 16 },
+    empty: { color: theme.colors.textSecondary, textAlign: 'center', marginTop: 24 },
+    tableGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    // Variant C's badge chip straddles a card's bottom edge — extra
+    // row spacing so it doesn't run into the next row's cards.
+    gridRowGapForBadges: { rowGap: 24 },
+    tableCard: { width: '47%' },
+    tableCardIcon: {
+      fontSize: 34,
+      color: theme.colors.accent,
+      textAlign: 'center',
+      textShadowColor: 'rgba(0,0,0,0.3)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
+    },
+    tableCardBody: { gap: 4 },
+    tableCardName: { fontSize: theme.font.size.lg, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    tableCardSummary: { fontSize: theme.font.size.xs, color: theme.colors.textSecondary, textAlign: 'center' },
+    newTableForm: { gap: 10 },
+    newTableActions: { flexDirection: 'row', gap: 10 },
+    flexBtn: { flex: 1 },
+  });
