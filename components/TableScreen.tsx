@@ -6,7 +6,12 @@
  * — pick an existing one or create a new one inline — exercising
  * lib/pokerActions.ts#addPlayer end to end: players-info gets a new
  * row, net-results a formula-linked row, session-log a new merged
- * 2-column block.
+ * 2-column block. Since every account carries a real email, adding one
+ * also grants them real Drive access (lib/googleDriveApi.ts#grantPermission)
+ * and writes the cross-table discovery-index entry
+ * (lib/accountsApi.ts#inviteToAccount) — same two effects
+ * components/AllPlayersScreen.tsx's QR-claim flow produces for a
+ * name-only player once their email is filled in later.
  *
  * Doesn't fetch its own roster — all worksheet data is read once,
  * when the table is opened (TableHome.tsx's load()), and handed down
@@ -18,20 +23,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { inviteToAccount } from '../lib/accountsApi';
 import { displayName } from '../lib/displayName';
+import { grantPermission } from '../lib/googleDriveApi';
 import { PokerLedgerService, type Player, type TableInfoData } from '../lib/pokerActions';
 import { addSheetToAccount, createAccount, listAccounts, type PlayerAccount } from '../lib/playerAccounts';
 
 type Props = {
   spreadsheetId: string;
   userId: string;
+  tableName: string;
   getAccessToken: () => Promise<string>;
   players: Player[];
   tableInfo: TableInfoData | null;
   onChanged: () => void | Promise<void>;
 };
 
-export default function TableScreen({ spreadsheetId, userId, getAccessToken, players, tableInfo, onChanged }: Props) {
+export default function TableScreen({ spreadsheetId, userId, tableName, getAccessToken, players, tableInfo, onChanged }: Props) {
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
   const useAlias = tableInfo?.useAlias ?? false;
@@ -77,6 +85,21 @@ export default function TableScreen({ spreadsheetId, userId, getAccessToken, pla
     }
   };
 
+  // Real Drive access + the cross-table discovery-index write — same
+  // two effects components/AllPlayersScreen.tsx's QR-claim flow
+  // produces once a name-only player's email is filled in. Both
+  // best-effort: the players-info row is already the source of truth,
+  // written either way, so a failure here is surfaced (not swallowed)
+  // but doesn't undo the add.
+  const grantAccessAndInvite = async (accountName: string, email: string, accessToken: string) => {
+    try {
+      await grantPermission(spreadsheetId, email, 'writer', accessToken);
+    } catch (permErr) {
+      setError(`${accountName} was added, but granting them edit access failed: ` + (permErr instanceof Error ? permErr.message : String(permErr)));
+    }
+    await inviteToAccount(email, { spreadsheetId, name: tableName });
+  };
+
   const addAccountToTable = async (account: PlayerAccount) => {
     setAdding(true);
     setError(null);
@@ -84,6 +107,7 @@ export default function TableScreen({ spreadsheetId, userId, getAccessToken, pla
       const accessToken = await getAccessToken();
       await service.addPlayer(account.name, account.email, account.alias, accessToken);
       await addSheetToAccount(userId, account.id, spreadsheetId, accessToken);
+      await grantAccessAndInvite(account.name, account.email, accessToken);
       await Promise.all([onChanged(), loadAccounts()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -101,6 +125,7 @@ export default function TableScreen({ spreadsheetId, userId, getAccessToken, pla
       const account = await createAccount(userId, { name: newName.trim(), email: newEmail.trim(), alias: newAlias.trim() }, accessToken);
       await service.addPlayer(account.name, account.email, account.alias, accessToken);
       await addSheetToAccount(userId, account.id, spreadsheetId, accessToken);
+      await grantAccessAndInvite(account.name, account.email, accessToken);
       setNewName('');
       setNewEmail('');
       setNewAlias('');

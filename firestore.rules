@@ -1,0 +1,89 @@
+// Backs lib/accountsApi.ts — the cross-table discovery index (#6,
+// non-logged-in user flow / leftover_plan.md). One doc per person,
+// keyed by their lowercased email (the app's primary key for a
+// PlayerAccount, per lib/pokerTypes.ts's PlayerAccount).
+//
+// The core access pattern this has to support: a signed-in host can
+// add ANOTHER person (not yet signed in, maybe no account doc exists
+// yet) as a player on their table — that write has to land in the
+// invited person's own doc, before that person has ever opened the
+// app. So "someone else's doc" writes are real and expected, not a
+// bug to rule out — they're restricted to only ever growing the
+// `sheets` array, never touching identity fields (displayName, alias)
+// or flipping `hasSignedIn`.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /accounts/{email} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+      function isSelf() {
+        return isSignedIn() && request.auth.token.email.lower() == email;
+      }
+
+      // Only ever read your own account doc — the app never needs to
+      // read anyone else's (no cross-user directory lookups by email).
+      allow read: if isSelf();
+
+      // Your own doc (first sign-in: hasSignedIn true, full identity
+      // fields) — or a placeholder for someone else you're inviting
+      // (hasSignedIn must be false, and only the bootstrap fields are
+      // settable — no displayName/alias injected by a third party).
+      allow create: if isSelf()
+        || (isSignedIn()
+            && request.resource.data.hasSignedIn == false
+            && request.resource.data.keys().hasOnly(['uuid', 'sheets', 'hasSignedIn', 'createdAt', 'updatedAt']));
+
+      // Your own doc: full control. Someone else's doc: only allowed
+      // to grow `sheets` (inviting them to another table) — every
+      // other field, including hasSignedIn/displayName/alias, must be
+      // untouched, and the new sheets array must be a superset of the
+      // old one (append-only, never remove/replace someone's tables
+      // out from under them).
+      allow update: if isSelf()
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sheets', 'updatedAt'])
+            && request.resource.data.sheets.hasAll(resource.data.sheets));
+
+      allow delete: if false;
+    }
+
+    // Backs lib/claimsApi.ts — the QR "retroactive email backfill" flow.
+    // A player added by name only (no email) can't be found by the
+    // discovery index or granted real Drive access. The host generates
+    // a QR listing which of their tables are missing that name's
+    // email; whoever scans it (already signed in — their claimedBy
+    // comes from their own verified token, never something they typed)
+    // writes a pending claim here. Only the host who generated that QR
+    // (`generatedBy`, embedded in the QR payload itself) can read/
+    // process it — auto-processed on their next app open, since
+    // generating and handing out that specific QR was already their
+    // deliberate trust decision; no separate approval step.
+    match /claims/{claimId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      // A claim is only ever readable by the two parties it's about.
+      allow read: if isSignedIn()
+        && (request.auth.token.email.lower() == resource.data.generatedBy
+            || request.auth.token.email.lower() == resource.data.claimedBy);
+
+      // Only creatable by/for yourself — claimedBy must be the actual
+      // signed-in caller, not an arbitrary email they typed, and it
+      // always starts 'pending' (no one creates an already-'done' claim).
+      allow create: if isSignedIn()
+        && request.resource.data.claimedBy == request.auth.token.email.lower()
+        && request.resource.data.status == 'pending';
+
+      // Only the host it names can update it, and only to mark it
+      // processed — not to rewrite what was claimed or by whom.
+      allow update: if isSignedIn()
+        && request.auth.token.email.lower() == resource.data.generatedBy
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'processedAt']);
+
+      allow delete: if false;
+    }
+  }
+}

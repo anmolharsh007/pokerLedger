@@ -212,6 +212,23 @@ export class PokerLedgerService {
   }
 
   /**
+   * Backfills a blank email for the named player — the QR "retroactive
+   * claim" flow (lib/claimsApi.ts#processClaim): someone was added by
+   * name only, and this fills in their email once they've claimed it,
+   * without re-adding them as a new row. Only writes if a row with this
+   * exact name currently has a blank email — never overwrites an
+   * already-set (possibly different) email, and returns false rather
+   * than guessing if no such blank-email row exists.
+   */
+  async setPlayerEmail(name: string, email: string, accessToken: string): Promise<boolean> {
+    const roster = await this.listPlayers(accessToken);
+    const target = roster.find((p) => p.name === name && p.email.trim() === '');
+    if (!target) return false;
+    await this.writeValue({ value: email, sheetData: new SheetData(target.row, 'B', TABS.playersInfo) }, accessToken);
+    return true;
+  }
+
+  /**
    * Records one session: a new session-log row (Date/ratio/Buy-in(₹) +
    * every current player's Buy-ins(#)/Final chips, 0 for anyone who
    * sat this one out) and the matching sum-check row. sum-check's

@@ -234,6 +234,7 @@ export default function TableHome({ spreadsheetId, userId, getAccessToken }: Pro
         <TableScreen
           spreadsheetId={spreadsheetId}
           userId={userId}
+          tableName={tableInfo?.title || 'Poker Table'}
           getAccessToken={getAccessToken}
           players={players}
           tableInfo={tableInfo}
