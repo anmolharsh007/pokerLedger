@@ -5,12 +5,29 @@
  * chips here (that's Cash-out's job). Every value write here goes
  * through lib/pokerActions.ts#cashIn — no structural writes needed
  * (see that method's doc comment for why).
+ *
+ * No +/- stepper buttons — the whole card *is* the control: tap
+ * anywhere on a card to add a buy-in. Once it has one staged, the
+ * card lights up (accent border + tint) and a full-width bar appears
+ * across its top showing "+n" — that bar is itself the decrement
+ * button (tap it to back the count off by one; it disappears again at
+ * +0, since there's nothing left to decrement). Every tap also flashes
+ * the card's fill briefly brighter before it settles back, so a change
+ * registers as a beat, not just a number ticking.
  */
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import Button from './ui/Button';
+import Card from './ui/Card';
+import IconButton from './ui/IconButton';
 import DoubleTapButton from './DoubleTapButton';
 import { PokerLedgerService, type CashInEntry, type CurrentGameInfo, type Player } from '../lib/pokerActions';
+import { useTheme } from '../theme/ThemeProvider';
+import type { Theme } from '../theme/tokens';
+
+const FLASH_IN_MS = 130;
+const FLASH_OUT_MS = 380;
 
 type Props = {
   players: Player[];
@@ -22,13 +39,27 @@ type Props = {
 };
 
 export default function CashInScreen({ players, gameInfo, spreadsheetId, getAccessToken, onBack, onChanged }: Props) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
 
   // Local, staged — nothing is written until Add.
   const [deltas, setDeltas] = useState<Record<string, number>>({});
+  // One Animated.Value per player, created lazily and reused across
+  // renders — the "flash brighter then settle" pulse on every tap.
+  const flashRefs = useRef<Map<string, Animated.Value>>(new Map());
 
   const currentFor = (name: string) => gameInfo?.players.find((p) => p.name === name) ?? { buyIns: 0, finalChips: 0 };
+
+  const getFlash = (name: string) => {
+    let v = flashRefs.current.get(name);
+    if (!v) {
+      v = new Animated.Value(0);
+      flashRefs.current.set(name, v);
+    }
+    return v;
+  };
 
   // Buy-in count (current + delta) can never go below zero.
   const bumpDelta = (name: string, by: number) => {
@@ -38,6 +69,12 @@ export default function CashInScreen({ players, gameInfo, spreadsheetId, getAcce
       if (current + nextDelta < 0) return prev;
       return { ...prev, [name]: nextDelta };
     });
+    const flash = getFlash(name);
+    flash.setValue(0);
+    Animated.sequence([
+      Animated.timing(flash, { toValue: 1, duration: FLASH_IN_MS, useNativeDriver: true }),
+      Animated.timing(flash, { toValue: 0, duration: FLASH_OUT_MS, useNativeDriver: true }),
+    ]).start();
   };
 
   const handleAdd = async () => {
@@ -68,98 +105,91 @@ export default function CashInScreen({ players, gameInfo, spreadsheetId, getAcce
 
       <View style={styles.headerRow}>
         <Text style={styles.sectionTitle}>Cash-ins</Text>
-        <Pressable style={styles.refreshBtn} onPress={onChanged}>
-          <Text style={styles.refreshBtnText}>⟳</Text>
-        </Pressable>
+        <IconButton icon="⟳" onPress={onChanged} />
       </View>
 
       {players.length === 0 ? (
         <Text style={styles.empty}>No players yet.</Text>
       ) : (
-        players.map((p) => {
-          const current = currentFor(p.name);
-          const delta = deltas[p.name] ?? 0;
-          const warn = current.buyIns === 0 && delta > 0;
-          return (
-            <View key={p.row} style={styles.playerCard}>
-              <Text style={styles.playerName}>{p.name}</Text>
-
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Buy-ins</Text>
-                <View style={styles.greyBox}>
-                  <Text style={styles.greyText}>{current.buyIns}</Text>
-                </View>
-                <View style={styles.stepperRow}>
-                  <Pressable style={styles.stepperBtn} onPress={() => bumpDelta(p.name, -1)}>
-                    <Text style={styles.stepperBtnText}>−</Text>
+        <View style={styles.playerGrid}>
+          {players.map((p) => {
+            const current = currentFor(p.name);
+            const delta = deltas[p.name] ?? 0;
+            const warn = current.buyIns === 0 && delta > 0;
+            return (
+              <Card key={p.row} portrait highlighted={delta > 0} style={styles.playerCard}>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    StyleSheet.absoluteFill,
+                    { borderRadius: theme.radius.lg, backgroundColor: theme.colors.accent, opacity: getFlash(p.name).interpolate({ inputRange: [0, 1], outputRange: [0, 0.4] }) },
+                  ]}
+                />
+                <Pressable style={styles.cardTapArea} onPress={() => bumpDelta(p.name, 1)}>
+                  <Text style={styles.playerName} numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  <Text style={styles.banked}>
+                    {current.buyIns} buy-in{current.buyIns === 1 ? '' : 's'} banked
+                  </Text>
+                  {warn && (
+                    <Text style={styles.warning} numberOfLines={2}>
+                      Joins the current game
+                    </Text>
+                  )}
+                </Pressable>
+                {delta > 0 && (
+                  <Pressable style={styles.decrementBar} onPress={() => bumpDelta(p.name, -1)}>
+                    <Text style={styles.decrementBarText}>+{delta}</Text>
+                    <Text style={styles.decrementBarChevron}>⌄</Text>
                   </Pressable>
-                  <View style={styles.whiteBox}>
-                    <Text style={styles.whiteText}>{delta > 0 ? `+${delta}` : delta}</Text>
-                  </View>
-                  <Pressable style={styles.stepperBtn} onPress={() => bumpDelta(p.name, 1)}>
-                    <Text style={styles.stepperBtnText}>+</Text>
-                  </Pressable>
-                </View>
-              </View>
-
-              {warn && <Text style={styles.warning}>This adds {p.name} to the current game.</Text>}
-            </View>
-          );
-        })
+                )}
+              </Card>
+            );
+          })}
+        </View>
       )}
 
-      <Pressable style={styles.backBtn} onPress={onBack}>
-        <Text style={styles.backBtnText}>Table screen</Text>
-      </Pressable>
+      <Button label="Table screen" variant="secondary" onPress={onBack} />
 
       <DoubleTapButton label="Add" armedLabel="Tap again to add" onConfirm={handleAdd} />
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: 20, gap: 12 },
-  error: { color: '#c00', textAlign: 'center', marginBottom: 12 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionTitle: { fontSize: 15, fontWeight: '700', opacity: 0.6 },
-  refreshBtn: { paddingVertical: 4, paddingHorizontal: 8 },
-  refreshBtnText: { color: '#2f95dc', fontWeight: '700', fontSize: 18 },
-  empty: { opacity: 0.6, textAlign: 'center', marginVertical: 12 },
-  playerCard: { backgroundColor: '#f4f4f4', borderRadius: 10, padding: 14, gap: 8 },
-  playerName: { fontSize: 16, fontWeight: '700' },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  fieldLabel: { width: 55, fontSize: 13, opacity: 0.6, fontWeight: '600' },
-  greyBox: {
-    minWidth: 40,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  greyText: { fontWeight: '600' },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  stepperBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#2f95dc',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  whiteBox: {
-    minWidth: 44,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    backgroundColor: '#fff',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    alignItems: 'center',
-  },
-  whiteText: { fontWeight: '600' },
-  warning: { color: '#b8860b', fontSize: 12, fontWeight: '600' },
-  backBtn: { paddingVertical: 12, borderRadius: 10, backgroundColor: '#eee', alignItems: 'center' },
-  backBtnText: { fontWeight: '600', fontSize: 14 },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    content: { padding: 20, gap: 12 },
+    error: { color: theme.colors.danger, textAlign: 'center', marginBottom: 12 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    sectionTitle: { fontSize: theme.font.size.md, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary },
+    empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
+    playerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    playerCard: { width: '47%' },
+    // Fills the card so tapping almost anywhere on it registers as
+    // "add a buy-in" — the decrement bar (rendered after this, so it
+    // paints on top) claims just its own strip at the very top.
+    cardTapArea: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 4 },
+    playerName: { fontSize: theme.font.size.md, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    banked: { fontSize: theme.font.size.xs, color: theme.colors.textSecondary, textAlign: 'center' },
+    warning: { color: theme.colors.warning, fontSize: theme.font.size.xs, fontWeight: theme.font.weight.medium, textAlign: 'center' },
+    // The "+n" bar — both the display for the staged delta and, since
+    // it's a button, the way to back it off. Only shown once there's
+    // something to decrement.
+    decrementBar: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      paddingVertical: 7,
+      backgroundColor: theme.colors.accent,
+      borderTopLeftRadius: theme.radius.lg,
+      borderTopRightRadius: theme.radius.lg,
+    },
+    decrementBarText: { color: theme.colors.accentText, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.md },
+    decrementBarChevron: { color: theme.colors.accentText, fontSize: theme.font.size.sm, opacity: 0.7 },
+  });
