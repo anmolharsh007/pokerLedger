@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import AllPlayersScreen from './components/AllPlayersScreen';
+import PlayerAccountsScreen from './components/PlayerAccountsScreen';
 import ScanClaimScreen from './components/ScanClaimScreen';
 import TableHome from './components/TableHome';
 import Button from './components/ui/Button';
@@ -80,6 +81,7 @@ function AppContent() {
   const [showNewTableForm, setShowNewTableForm] = useState(false);
 
   const [selectedSpreadsheetId, setSelectedSpreadsheetId] = useState<string | null>(null);
+  const [showAccountsScreen, setShowAccountsScreen] = useState(false);
   const [showAllPlayers, setShowAllPlayers] = useState(false);
   const [showScanClaim, setShowScanClaim] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -217,6 +219,7 @@ function AppContent() {
     setTableSummaries({});
     setTablesError(null);
     setSelectedSpreadsheetId(null);
+    setShowAccountsScreen(false);
   };
 
   const handleCreateTable = async (name: string) => {
@@ -254,7 +257,7 @@ function AppContent() {
       // its owner. No grantPermission needed here (they already own
       // the file outright) or inviteToAccount (addOwnSheet below is
       // that exact same Firestore write, for themselves).
-      await service.addPlayer(user.displayName || user.email || 'Me', user.email ?? '', accessToken);
+      await service.addPlayer(user.displayName || user.email || 'Me', user.email ?? '', '', accessToken);
       // Best-effort discovery-index write — see loadTables' comment.
       if (user.email) await addOwnSheet(user.email, { spreadsheetId, name });
       setShowNewTableForm(false);
@@ -366,6 +369,15 @@ function AppContent() {
     );
   }
 
+  if (showAccountsScreen) {
+    return (
+      <LinearGradient colors={theme.gradients.background} style={styles.container}>
+        <PlayerAccountsScreen userId={user.id} getAccessToken={() => auth.getAccessToken()} onBack={() => setShowAccountsScreen(false)} />
+        <StatusBar style={theme.statusBarStyle} />
+      </LinearGradient>
+    );
+  }
+
   if (selectedSpreadsheetId) {
     return (
       <LinearGradient colors={theme.gradients.background} style={styles.container}>
@@ -381,7 +393,7 @@ function AppContent() {
             </Pressable>
           </View>
         </View>
-        <TableHome spreadsheetId={selectedSpreadsheetId} getAccessToken={() => auth.getAccessToken()} />
+        <TableHome spreadsheetId={selectedSpreadsheetId} userId={user.id} getAccessToken={() => auth.getAccessToken()} />
         <StatusBar style={theme.statusBarStyle} />
       </LinearGradient>
     );
@@ -422,6 +434,9 @@ function AppContent() {
           </Pressable>
           <Pressable onPress={() => setShowAllPlayers(true)}>
             <Text style={styles.headerLinkText}>Players</Text>
+          </Pressable>
+          <Pressable onPress={() => setShowAccountsScreen(true)}>
+            <Text style={styles.headerLinkText}>Player Accounts</Text>
           </Pressable>
           <Pressable style={styles.refreshBtn} onPress={loadTables} onLongPress={handleVerifySheets} delayLongPress={500}>
             {verifying ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text style={styles.refreshBtnText}>⟳</Text>}

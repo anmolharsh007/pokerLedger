@@ -38,6 +38,7 @@ import GradientSurface from './ui/GradientSurface';
 import IconButton from './ui/IconButton';
 import ModalCard from './ui/ModalCard';
 import TextField from './ui/TextField';
+import { displayName } from '../lib/displayName';
 import { PokerLedgerService, type CurrentGameInfo, type GroupInfo, type Player, type TableInfoData } from '../lib/pokerActions';
 import { useTheme } from '../theme/ThemeProvider';
 import type { GradientStops, Theme } from '../theme/tokens';
@@ -62,6 +63,9 @@ export type TableHomeMockData = {
 
 type Props = {
   spreadsheetId: string;
+  // Only needed to reach TableScreen's account picker (lib/playerAccounts.ts)
+  // — unused (and left '') in mock mode, since Players is disabled there.
+  userId?: string;
   getAccessToken: () => Promise<string>;
   // When set, this never touches the network — every read comes from
   // here and every write only updates local state. Used by
@@ -82,7 +86,7 @@ function deriveGameState(tableInfo: TableInfoData | null): GameState {
 const notImplemented = (what: string) => Alert.alert(what, 'Coming in a later build round.');
 const notInPreview = (what: string) => Alert.alert(what, "Not part of the static preview — see the real flow once the backend is fixed.");
 
-export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props) {
+export default function TableHome({ spreadsheetId, userId = '', getAccessToken, mock }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
@@ -119,6 +123,15 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
   // until the popup actually closes, so a name stays visible right
   // after you uncheck it instead of disappearing mid-review.
   const [popupChecked, setPopupChecked] = useState<Set<string>>(new Set());
+
+  const useAlias = tableInfo?.useAlias ?? false;
+  // selectedPlayers/popupChecked hold real names (startGame needs them
+  // that way) — this looks each up against the roster purely so the
+  // popup can show the alias when the table's toggle is on.
+  const selectedPlayerLabel = (name: string) => {
+    const p = players.find((pl) => pl.name === name);
+    return p ? displayName(p, useAlias) : name;
+  };
 
   // Everything this table needs — TableInfo, the current game, the
   // player roster, groups — is read from the sheet once here, when
@@ -235,7 +248,7 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
         date: new Date().toISOString().slice(0, 10),
         ratio: chips > 0 ? buyInAmount / chips : 0,
         buyInAmount,
-        players: players.map((p) => ({ name: p.name, buyIns: selected.has(p.name) ? 1 : 0, finalChips: 0 })),
+        players: players.map((p) => ({ name: p.name, alias: p.alias, buyIns: selected.has(p.name) ? 1 : 0, finalChips: 0 })),
       });
       setBuyInConfirmed(false);
       setSelectedPlayers(null);
@@ -304,9 +317,11 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
         </Pressable>
         <TableScreen
           spreadsheetId={spreadsheetId}
+          userId={userId}
           tableName={tableInfo?.title || 'Poker Table'}
           getAccessToken={getAccessToken}
           players={players}
+          tableInfo={tableInfo}
           onChanged={load}
         />
       </View>
@@ -322,6 +337,7 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
         getAccessToken={getAccessToken}
         selectedPlayers={selectedPlayers}
         setSelectedPlayers={setSelectedPlayers}
+        useAlias={useAlias}
         onBack={() => setShowGroupScreen(false)}
         onChanged={load}
       />
@@ -335,6 +351,7 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
         gameInfo={gameInfo}
         spreadsheetId={spreadsheetId}
         getAccessToken={getAccessToken}
+        useAlias={useAlias}
         onBack={() => setShowCashInScreen(false)}
         onChanged={load}
       />
@@ -347,6 +364,7 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
         gameInfo={gameInfo}
         spreadsheetId={spreadsheetId}
         getAccessToken={getAccessToken}
+        useAlias={useAlias}
         onBack={() => setShowCashOutScreen(false)}
         onChanged={load}
       />
@@ -577,7 +595,7 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
           onPress={() => setShowPlayingModal(true)}>
           <Text style={styles.playingBtnLabel}>👥 Playing</Text>
           <Text style={styles.playingBtnNames} numberOfLines={1}>
-            {playingPlayers.map((p) => p.name).join(', ')}
+            {playingPlayers.map((p) => displayName(p, useAlias)).join(', ')}
           </Text>
           <Text style={styles.playingBtnChevron}>›</Text>
         </Pressable>
@@ -593,7 +611,7 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
             <Text style={styles.modalLine}>Buy-in (₹): {gameInfo.buyInAmount}</Text>
             {playingPlayers.map((p) => (
               <Text key={p.name} style={styles.modalLine}>
-                {p.name} — {p.buyIns} buy-in(s), {p.finalChips} chips
+                {displayName(p, useAlias)} — {p.buyIns} buy-in(s), {p.finalChips} chips
               </Text>
             ))}
           </>
@@ -606,7 +624,7 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
         <Text style={styles.modalTitle}>Currently playing</Text>
         {playingPlayers.map((p) => (
           <Text key={p.name} style={styles.modalLine}>
-            {p.name} — {p.buyIns} buy-in(s)
+            {displayName(p, useAlias)} — {p.buyIns} buy-in(s)
           </Text>
         ))}
         <Button label="Close" onPress={() => setShowPlayingModal(false)} />
@@ -622,7 +640,7 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
           <Text style={styles.modalLine}>No players selected.</Text>
         ) : (
           (selectedPlayers ?? []).map((name) => (
-            <Checkbox key={name} checked={popupChecked.has(name)} onPress={() => togglePopupChecked(name)} label={name} />
+            <Checkbox key={name} checked={popupChecked.has(name)} onPress={() => togglePopupChecked(name)} label={selectedPlayerLabel(name)} />
           ))
         )}
         <Button label="Close" onPress={handleCloseSelectedPopup} />

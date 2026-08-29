@@ -19,6 +19,7 @@ import IconButton from './ui/IconButton';
 import ModalCard from './ui/ModalCard';
 import TextField from './ui/TextField';
 import DoubleTapButton from './DoubleTapButton';
+import { displayName } from '../lib/displayName';
 import { PokerLedgerService, type CashInEntry, type CurrentGameInfo } from '../lib/pokerActions';
 import { useTheme } from '../theme/ThemeProvider';
 import type { Theme } from '../theme/tokens';
@@ -29,11 +30,12 @@ type Props = {
   gameInfo: CurrentGameInfo | null;
   spreadsheetId: string;
   getAccessToken: () => Promise<string>;
+  useAlias: boolean;
   onBack: () => void;
   onChanged: () => void | Promise<void>;
 };
 
-export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken, onBack, onChanged }: Props) {
+export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken, useAlias, onBack, onChanged }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
@@ -49,6 +51,10 @@ export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken,
   const [editValue, setEditValue] = useState('');
 
   const playingPlayers = (gameInfo?.players ?? []).filter((p) => p.buyIns > 0);
+  const editingPlayerLabel = () => {
+    const p = playingPlayers.find((pl) => pl.name === editingPlayer);
+    return p ? displayName(p, useAlias) : editingPlayer;
+  };
 
   const handleCardPress = (name: string) => {
     const now = Date.now();
@@ -123,7 +129,7 @@ export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken,
                     </Pressable>
                   )}
                   <Text style={styles.playerName} numberOfLines={1}>
-                    {p.name}
+                    {displayName(p, useAlias)}
                   </Text>
                   {filled ? (
                     <View style={styles.chipsSet}>
@@ -153,7 +159,7 @@ export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken,
         <View style={styles.modalIconRow}>
           <ChipStackIcon size={28} />
         </View>
-        <Text style={styles.modalTitle}>Final chips — {editingPlayer}</Text>
+        <Text style={styles.modalTitle}>Final chips — {editingPlayerLabel()}</Text>
         <TextField
           value={editValue}
           onChangeText={setEditValue}

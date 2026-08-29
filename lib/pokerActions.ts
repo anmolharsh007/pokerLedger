@@ -31,7 +31,7 @@ const DEFAULT_GRID_ROWS = 1000; // Sheets' default new-sheet row count
 // rows stay aligned 1:1 with session-log's by row number.
 const SESSION_DATA_FIRST_ROW = 3;
 
-export type Player = { row: number; name: string; email: string };
+export type Player = { row: number; name: string; email: string; alias: string };
 export type SessionEntry = { name: string; buyIns: number; finalChips: number };
 export type SessionInput = { date: string; ratio: number; buyInAmount: number; players: SessionEntry[] };
 
@@ -113,7 +113,12 @@ export class PokerLedgerService {
 
   /**
    * Registers a new player on this table:
-   *  1. Appends their name + email to players-info's next empty row.
+   *  1. Appends their name + email + alias to players-info's next empty
+   *     row. name/email are the real identity (what every other tab's
+   *     formulas link to); alias is display-only, shown instead of name
+   *     wherever the table's "use alias" flag is on. Callers source all
+   *     three from a global player account (lib/playerAccounts.ts), not
+   *     free text.
    *  2. Appends a formula-linked row to net-results (`='players-info'!A{row}`
    *     for the name; Total is a self-updating formula over this
    *     player's own session-log columns — correct automatically as
@@ -126,7 +131,7 @@ export class PokerLedgerService {
    *     Structural (merge + possibly grow the grid), so it goes through
    *     runStructural, not a plain value write.
    */
-  async addPlayer(name: string, email: string, accessToken: string): Promise<void> {
+  async addPlayer(name: string, email: string, alias: string, accessToken: string): Promise<void> {
     const meta = await this.readMeta(accessToken);
     const sessionLogSheet = meta.sheets.find((s) => s.properties.title === TABS.sessionLog);
     if (!sessionLogSheet) throw new Error(`Sheet is missing the "${TABS.sessionLog}" tab`);
@@ -187,6 +192,7 @@ export class PokerLedgerService {
       [
         { value: name, sheetData: new SheetData(playerRow, 'A', TABS.playersInfo) },
         { value: email, sheetData: new SheetData(playerRow, 'B', TABS.playersInfo) },
+        { value: alias, sheetData: new SheetData(playerRow, 'C', TABS.playersInfo) },
         { value: nameLinkFormula, sheetData: new SheetData(playerRow, 'A', TABS.netResults) },
         { value: totalFormula, sheetData: new SheetData(playerRow, 'B', TABS.netResults) },
         { value: nameLinkFormula, sheetData: new SheetData(1, buyInsLetter, TABS.sessionLog) },
@@ -199,9 +205,9 @@ export class PokerLedgerService {
 
   /** Reads the current player roster from players-info, in row order (== the order addPlayer assigned session-log columns in). */
   async listPlayers(accessToken: string): Promise<Player[]> {
-    const values = await this.readRange(TABS.playersInfo, 'A2:B200', accessToken);
+    const values = await this.readRange(TABS.playersInfo, 'A2:C200', accessToken);
     return values
-      .map((row, i) => ({ row: i + 2, name: row[0] ?? '', email: row[1] ?? '' }))
+      .map((row, i) => ({ row: i + 2, name: row[0] ?? '', email: row[1] ?? '', alias: row[2] ?? '' }))
       .filter((p) => p.name.trim() !== '');
   }
 
@@ -297,9 +303,9 @@ export class PokerLedgerService {
 
   // ---- TableInfo / live-game lifecycle (Table screen) ----
 
-  /** Reads TableInfo's label/value rows: title (A1/B1), Usual buy-in (₹)/(chips) (A2:B3), and — once a game has ever started — status (A4/B4) and sessionRow (A5/B5). */
+  /** Reads TableInfo's label/value rows: title (A1/B1), Usual buy-in (₹)/(chips) (A2:B3), and — once a game has ever started — status (A4/B4) and sessionRow (A5/B5). Also reads the "use alias" toggle (A6/B6) — 'false' (the default, including tables seeded before this flag existed) if never set. */
   async getTableInfo(accessToken: string): Promise<TableInfoData> {
-    const rows = await this.readRange(TABS.tableInfo, 'A1:B5', accessToken);
+    const rows = await this.readRange(TABS.tableInfo, 'A1:B6', accessToken);
     const value = (r: number) => rows[r]?.[1] ?? '';
     const status = value(3);
     const sessionRow = value(4);
@@ -309,6 +315,7 @@ export class PokerLedgerService {
       usualChips: Number(value(2)) || 0,
       status: status === 'in progress' || status === 'last played' ? status : null,
       sessionRow: sessionRow ? Number(sessionRow) : null,
+      useAlias: value(5) === 'true',
     };
   }
 
@@ -323,6 +330,25 @@ export class PokerLedgerService {
       [
         { value: buyInAmount, sheetData: new SheetData(2, 'B', TABS.tableInfo) },
         { value: chips, sheetData: new SheetData(3, 'B', TABS.tableInfo) },
+      ],
+      accessToken
+    );
+  }
+
+  /**
+   * Writes TableInfo's "use alias" toggle (A6 label + B6 boolean-as-string).
+   * Display-only — every join elsewhere (addSession/startGame/addGroup/
+   * updateGroup/listGroups/cashIn) keeps matching by the real name in
+   * players-info!A regardless of this flag. Rewrites the label every call
+   * (not just once), same defensive style startGame uses for status/
+   * sessionRow, so a table seeded before this flag existed self-heals it on
+   * first toggle.
+   */
+  async setUseAlias(value: boolean, accessToken: string): Promise<void> {
+    await this.writeValues(
+      [
+        { value: 'use alias', sheetData: new SheetData(6, 'A', TABS.tableInfo) },
+        { value: value ? 'true' : 'false', sheetData: new SheetData(6, 'B', TABS.tableInfo) },
       ],
       accessToken
     );
@@ -442,6 +468,7 @@ export class PokerLedgerService {
       const startCol = SESSION_LOG_FIRST_PLAYER_COL + i * SESSION_LOG_COLS_PER_PLAYER;
       return {
         name: player.name,
+        alias: player.alias,
         buyIns: Number(cells[startCol]) || 0,
         finalChips: Number(cells[startCol + 1]) || 0,
       };
@@ -590,6 +617,7 @@ export type TableInfoData = {
   usualChips: number;
   status: 'in progress' | 'last played' | null;
   sessionRow: number | null;
+  useAlias: boolean;
 };
 
 export type CurrentGameInfo = {
@@ -597,7 +625,7 @@ export type CurrentGameInfo = {
   date: string;
   ratio: number;
   buyInAmount: number;
-  players: Array<{ name: string; buyIns: number; finalChips: number }>;
+  players: Array<{ name: string; alias: string; buyIns: number; finalChips: number }>;
 };
 
 export type GroupInfo = { name: string; members: string[] };

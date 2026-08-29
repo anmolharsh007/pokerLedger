@@ -19,6 +19,7 @@ import Checkbox from './ui/Checkbox';
 import IconButton from './ui/IconButton';
 import ModalCard from './ui/ModalCard';
 import TextField from './ui/TextField';
+import { displayName } from '../lib/displayName';
 import { PokerLedgerService, type GroupInfo, type Player } from '../lib/pokerActions';
 // Per-card colors turned off for now — see the commented `tint` prop
 // below; may want them back later.
@@ -33,6 +34,7 @@ type Props = {
   getAccessToken: () => Promise<string>;
   selectedPlayers: string[] | null;
   setSelectedPlayers: Dispatch<SetStateAction<string[] | null>>;
+  useAlias: boolean;
   onBack: () => void;
   onChanged: () => void | Promise<void>;
 };
@@ -45,6 +47,7 @@ export default function GroupScreen({
   spreadsheetId,
   getAccessToken,
   setSelectedPlayers,
+  useAlias,
   onBack,
   onChanged,
 }: Props) {
@@ -53,6 +56,14 @@ export default function GroupScreen({
   const styles = useMemo(() => createStyles(theme), [theme]);
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
+
+  // group members are plain resolved name strings (listGroups reads back
+  // already-evaluated formula text) — look each up against the roster
+  // purely for display, never for the join itself.
+  const memberLabel = (name: string) => {
+    const p = players.find((pl) => pl.name === name);
+    return p ? displayName(p, useAlias) : name;
+  };
 
   // Radio behavior — only one group can be selected at a time.
   const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
@@ -180,7 +191,7 @@ export default function GroupScreen({
                   {group.members.length} member{group.members.length === 1 ? '' : 's'}
                 </Text>
                 <Text style={styles.groupCardMembers} numberOfLines={2}>
-                  {group.members.join(', ') || 'No members'}
+                  {group.members.map(memberLabel).join(', ') || 'No members'}
                 </Text>
               </CardButton>
             );
@@ -198,7 +209,7 @@ export default function GroupScreen({
         <TextField value={newGroupTitle} onChangeText={setNewGroupTitle} placeholder="Group title" autoFocus />
         <ScrollView style={styles.checkboxList}>
           {players.map((p) => (
-            <Checkbox key={p.row} checked={checkedPlayers.has(p.name)} onPress={() => toggleChecked(p.name)} label={p.name} />
+            <Checkbox key={p.row} checked={checkedPlayers.has(p.name)} onPress={() => toggleChecked(p.name)} label={displayName(p, useAlias)} />
           ))}
         </ScrollView>
         <View style={styles.modalActions}>
@@ -220,7 +231,7 @@ export default function GroupScreen({
         ) : (
           infoGroup?.members.map((m) => (
             <Text key={m} style={styles.modalLine}>
-              {m}
+              {memberLabel(m)}
             </Text>
           ))
         )}
@@ -233,7 +244,7 @@ export default function GroupScreen({
         <TextField value={editTitle} onChangeText={setEditTitle} placeholder="Group title" />
         <ScrollView style={styles.checkboxList}>
           {players.map((p) => (
-            <Checkbox key={p.row} checked={editChecked.has(p.name)} onPress={() => toggleEditChecked(p.name)} label={p.name} />
+            <Checkbox key={p.row} checked={editChecked.has(p.name)} onPress={() => toggleEditChecked(p.name)} label={displayName(p, useAlias)} />
           ))}
         </ScrollView>
         <View style={styles.modalActions}>

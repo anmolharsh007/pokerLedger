@@ -22,6 +22,7 @@ import Button from './ui/Button';
 import Card from './ui/Card';
 import IconButton from './ui/IconButton';
 import DoubleTapButton from './DoubleTapButton';
+import { displayName } from '../lib/displayName';
 import { PokerLedgerService, type CashInEntry, type CurrentGameInfo, type Player } from '../lib/pokerActions';
 import { useTheme } from '../theme/ThemeProvider';
 import type { Theme } from '../theme/tokens';
@@ -34,11 +35,12 @@ type Props = {
   gameInfo: CurrentGameInfo | null;
   spreadsheetId: string;
   getAccessToken: () => Promise<string>;
+  useAlias: boolean;
   onBack: () => void;
   onChanged: () => void | Promise<void>;
 };
 
-export default function CashInScreen({ players, gameInfo, spreadsheetId, getAccessToken, onBack, onChanged }: Props) {
+export default function CashInScreen({ players, gameInfo, spreadsheetId, getAccessToken, useAlias, onBack, onChanged }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
@@ -127,7 +129,7 @@ export default function CashInScreen({ players, gameInfo, spreadsheetId, getAcce
                 />
                 <Pressable style={styles.cardTapArea} onPress={() => bumpDelta(p.name, 1)}>
                   <Text style={styles.playerName} numberOfLines={1}>
-                    {p.name}
+                    {displayName(p, useAlias)}
                   </Text>
                   <Text style={styles.banked}>
                     {current.buyIns} buy-in{current.buyIns === 1 ? '' : 's'} banked

@@ -26,11 +26,11 @@ export const mockTableSummaries: Record<string, string[]> = {
 };
 
 const players: Player[] = [
-  { row: 2, name: 'Aarav', email: 'aarav@example.com' },
-  { row: 3, name: 'Bhavna', email: 'bhavna@example.com' },
-  { row: 4, name: 'Chirag', email: '' },
-  { row: 5, name: 'Divya', email: 'divya@example.com' },
-  { row: 6, name: 'Esha', email: '' },
+  { row: 2, name: 'Aarav', email: 'aarav@example.com', alias: '' },
+  { row: 3, name: 'Bhavna', email: 'bhavna@example.com', alias: '' },
+  { row: 4, name: 'Chirag', email: '', alias: '' },
+  { row: 5, name: 'Divya', email: 'divya@example.com', alias: '' },
+  { row: 6, name: 'Esha', email: '', alias: '' },
 ];
 
 const groups: GroupInfo[] = [
@@ -42,18 +42,18 @@ const mockByTable: Record<string, TableHomeMockData> = {
   // Game in progress — status row, "Playing:" line, disabled setup
   // fields, Cash-ins/Cash-outs/End all enabled.
   'static-friday-night': {
-    tableInfo: { title: 'Friday Night', usualBuyIn: 500, usualChips: 1000, status: 'in progress', sessionRow: 3 },
+    tableInfo: { title: 'Friday Night', usualBuyIn: 500, usualChips: 1000, status: 'in progress', sessionRow: 3, useAlias: false },
     gameInfo: {
       row: 3,
       date: new Date().toISOString().slice(0, 10),
       ratio: 0.5,
       buyInAmount: 500,
       players: [
-        { name: 'Aarav', buyIns: 2, finalChips: 0 },
-        { name: 'Bhavna', buyIns: 1, finalChips: 0 },
-        { name: 'Chirag', buyIns: 1, finalChips: 0 },
-        { name: 'Divya', buyIns: 0, finalChips: 0 },
-        { name: 'Esha', buyIns: 0, finalChips: 0 },
+        { name: 'Aarav', alias: '', buyIns: 2, finalChips: 0 },
+        { name: 'Bhavna', alias: '', buyIns: 1, finalChips: 0 },
+        { name: 'Chirag', alias: '', buyIns: 1, finalChips: 0 },
+        { name: 'Divya', alias: '', buyIns: 0, finalChips: 0 },
+        { name: 'Esha', alias: '', buyIns: 0, finalChips: 0 },
       ],
     },
     players,
@@ -62,15 +62,15 @@ const mockByTable: Record<string, TableHomeMockData> = {
   // Last game played — setup fields re-enabled, All+/Group+ ready for
   // the next game, Cash-ins enabled (there's a session row), Cash-outs/End not.
   'static-office-club': {
-    tableInfo: { title: 'Office Poker Club', usualBuyIn: 200, usualChips: 500, status: 'last played', sessionRow: 7 },
+    tableInfo: { title: 'Office Poker Club', usualBuyIn: 200, usualChips: 500, status: 'last played', sessionRow: 7, useAlias: false },
     gameInfo: {
       row: 7,
       date: '2026-08-21',
       ratio: 0.4,
       buyInAmount: 200,
       players: [
-        { name: 'Aarav', buyIns: 3, finalChips: 640 },
-        { name: 'Bhavna', buyIns: 2, finalChips: 210 },
+        { name: 'Aarav', alias: '', buyIns: 3, finalChips: 640 },
+        { name: 'Bhavna', alias: '', buyIns: 2, finalChips: 210 },
       ],
     },
     players,
@@ -78,7 +78,7 @@ const mockByTable: Record<string, TableHomeMockData> = {
   },
   // Never played — everything at its starting gate, only All+/Group+ enabled.
   'static-high-rollers': {
-    tableInfo: { title: 'High Rollers', usualBuyIn: 2000, usualChips: 2000, status: null, sessionRow: null },
+    tableInfo: { title: 'High Rollers', usualBuyIn: 2000, usualChips: 2000, status: null, sessionRow: null, useAlias: false },
     gameInfo: null,
     players,
     groups,

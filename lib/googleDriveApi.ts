@@ -43,6 +43,20 @@ async function findFolder(name: string, parentId: string, accessToken: string): 
   return body.files?.[0]?.id ?? null;
 }
 
+/** Finds a file (not a folder) by exact name under `parentId`; returns its id, or null if none exists. */
+export async function findFile(name: string, parentId: string, accessToken: string): Promise<string | null> {
+  const q = `name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false`;
+  const params = new URLSearchParams({ q, fields: 'files(id,name)' });
+  const response = await fetch(`${DRIVE_FILES_URL}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    throw new DriveApiError(await extractErrorMessage(response, `Drive file lookup failed: ${response.status}`));
+  }
+  const body = (await response.json()) as { files?: Array<{ id: string }> };
+  return body.files?.[0]?.id ?? null;
+}
+
 async function createFolder(name: string, parentId: string, accessToken: string): Promise<string> {
   const response = await fetch(DRIVE_FILES_URL, {
     method: 'POST',
