@@ -108,7 +108,7 @@ export default function DoubleTapButton({ label, armedLabel, onConfirm, disabled
       {busy ? (
         <ActivityIndicator color={fgColor} />
       ) : (
-        <Text style={[styles.text, { color: disabled ? colors.textSecondary : fgColor, fontSize: font.size.md, fontWeight: font.weight.bold }]}>
+        <Text style={[styles.text, { color: disabled ? colors.textSecondary : fgColor, fontSize: font.size.md, fontFamily: font.family.bold, fontWeight: font.weight.bold }]}>
           {armed ? (armedLabel ?? 'Tap again to confirm') : label}
         </Text>
       )}

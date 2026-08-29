@@ -24,7 +24,9 @@
       "output": "single"
     },
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font",
+      "expo-splash-screen"
     ]
   }
 }

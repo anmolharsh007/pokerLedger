@@ -43,7 +43,7 @@ export default function IconButton({ icon, onPress, variant = 'plain', size = 32
       <Text
         style={{
           color: filled ? colors.accentText : colors.accent,
-          fontWeight: font.weight.bold,
+          fontFamily: font.family.bold, fontWeight: font.weight.bold,
           fontSize: size * 0.45,
         }}>
         {icon}

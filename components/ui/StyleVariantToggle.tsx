@@ -29,7 +29,7 @@ export default function StyleVariantToggle() {
             key={v}
             onPress={() => setStyleVariant(v)}
             style={[styles.segment, { borderRadius: theme.radius.pill }, active && { backgroundColor: theme.colors.accent }]}>
-            <Text style={[styles.label, { color: active ? theme.colors.accentText : theme.colors.textSecondary, fontWeight: theme.font.weight.bold }]}>
+            <Text style={[styles.label, { color: active ? theme.colors.accentText : theme.colors.textSecondary, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold }]}>
               {v}
             </Text>
           </Pressable>

@@ -16,6 +16,7 @@ export default function TextField(props: TextInputProps) {
       style={[
         {
           fontSize: font.size.md,
+          fontFamily: font.family.regular,
           color: colors.textPrimary,
           paddingVertical: 10,
           paddingHorizontal: 12,

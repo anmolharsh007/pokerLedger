@@ -97,7 +97,7 @@ export default function Card({ children, style, raised, portrait, borderColor, b
         <View style={badgeStyles.wrap} pointerEvents="none">
           <View style={[badgeStyles.chip, { borderColor: theme.bevel.light }]}>
             <GradientSurface colors={theme.gradients.accent} sheen={false} style={StyleSheet.absoluteFill} />
-            <Text style={[badgeStyles.text, { color: theme.colors.accentText }]}>{badge}</Text>
+            <Text style={[badgeStyles.text, { color: theme.colors.accentText, fontFamily: theme.font.family.bold }]}>{badge}</Text>
           </View>
         </View>
       )}

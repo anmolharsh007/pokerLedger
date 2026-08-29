@@ -60,7 +60,7 @@ export default function Button({ label, onPress, variant = 'primary', disabled, 
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
-        <Text style={[styles.text, { color: disabled ? colors.textSecondary : fg, fontSize: font.size.md, fontWeight: font.weight.bold }]}>
+        <Text style={[styles.text, { color: disabled ? colors.textSecondary : fg, fontSize: font.size.md, fontFamily: font.family.bold, fontWeight: font.weight.bold }]}>
           {label}
         </Text>
       )}

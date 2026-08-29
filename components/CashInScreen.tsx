@@ -162,7 +162,7 @@ const createStyles = (theme: Theme) =>
     content: { padding: 20, gap: 12 },
     error: { color: theme.colors.danger, textAlign: 'center', marginBottom: 12 },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    sectionTitle: { fontSize: theme.font.size.md, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary },
+    sectionTitle: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary },
     empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
     playerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
     playerCard: { width: '47%' },
@@ -170,9 +170,9 @@ const createStyles = (theme: Theme) =>
     // "add a buy-in" — the decrement bar (rendered after this, so it
     // paints on top) claims just its own strip at the very top.
     cardTapArea: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 4 },
-    playerName: { fontSize: theme.font.size.md, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
-    banked: { fontSize: theme.font.size.xs, color: theme.colors.textSecondary, textAlign: 'center' },
-    warning: { color: theme.colors.warning, fontSize: theme.font.size.xs, fontWeight: theme.font.weight.medium, textAlign: 'center' },
+    playerName: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    banked: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
+    warning: { color: theme.colors.warning, fontSize: theme.font.size.xs, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, textAlign: 'center' },
     // The "+n" bar — both the display for the staged delta and, since
     // it's a button, the way to back it off. Only shown once there's
     // something to decrement.
@@ -190,6 +190,6 @@ const createStyles = (theme: Theme) =>
       borderTopLeftRadius: theme.radius.lg,
       borderTopRightRadius: theme.radius.lg,
     },
-    decrementBarText: { color: theme.colors.accentText, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.md },
-    decrementBarChevron: { color: theme.colors.accentText, fontSize: theme.font.size.sm, opacity: 0.7 },
+    decrementBarText: { color: theme.colors.accentText, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.md },
+    decrementBarChevron: { color: theme.colors.accentText, fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, opacity: 0.7 },
   });

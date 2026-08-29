@@ -87,7 +87,7 @@ const createStyles = (theme: Theme) =>
     content: { padding: 20, gap: 12 },
     error: { color: theme.colors.danger, textAlign: 'center', marginBottom: 12 },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    sectionTitle: { fontSize: theme.font.size.md, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary, marginTop: 8 },
+    sectionTitle: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary, marginTop: 8 },
     empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
     playerRow: {
       flexDirection: 'row',
@@ -96,6 +96,6 @@ const createStyles = (theme: Theme) =>
       paddingVertical: 12,
       paddingHorizontal: 16,
     },
-    playerName: { fontSize: theme.font.size.md, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
-    playerEmail: { fontSize: theme.font.size.sm, color: theme.colors.textSecondary },
+    playerName: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
+    playerEmail: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary },
   });

@@ -1,5 +1,7 @@
+import { CormorantGaramond_400Regular, CormorantGaramond_500Medium, CormorantGaramond_700Bold, useFonts } from '@expo-google-fonts/cormorant-garamond';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -23,7 +25,28 @@ import type { Theme } from './theme/tokens';
 
 const auth = new GoogleAuthProvider();
 
+// Keeps the native splash up until the app's one font (theme/tokens.ts's
+// font.family — Cormorant Garamond, throughout) is ready, so nothing
+// ever flashes system-font-then-swaps.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    CormorantGaramond_400Regular,
+    CormorantGaramond_500Medium,
+    CormorantGaramond_700Bold,
+  });
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   return (
     <ThemeProvider>
       <AppContent />
@@ -331,25 +354,26 @@ const createStyles = (theme: Theme) =>
     headerActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
     title: {
       fontSize: theme.font.size.xl,
-      fontWeight: theme.font.weight.bold,
+      fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
       color: theme.colors.textPrimary,
     },
     subtitle: {
       fontSize: theme.font.size.md,
+      fontFamily: theme.font.family.regular,
       color: theme.colors.textSecondary,
       textAlign: 'center',
     },
     backText: {
       fontSize: theme.font.size.lg,
       color: theme.colors.accent,
-      fontWeight: theme.font.weight.bold,
+      fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
     },
     signInBtn: { minWidth: 220 },
-    staticPreviewLink: { fontSize: theme.font.size.xs, color: theme.colors.textSecondary, textDecorationLine: 'underline' },
+    staticPreviewLink: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textDecorationLine: 'underline' },
     retryBtn: { minWidth: 160 },
     signOutText: {
       color: theme.colors.danger,
-      fontWeight: theme.font.weight.bold,
+      fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
     },
     error: { color: theme.colors.danger, textAlign: 'center' },
     list: { padding: 20, gap: 16 },
@@ -368,8 +392,8 @@ const createStyles = (theme: Theme) =>
       textShadowRadius: 2,
     },
     tableCardBody: { gap: 4 },
-    tableCardName: { fontSize: theme.font.size.lg, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
-    tableCardSummary: { fontSize: theme.font.size.xs, color: theme.colors.textSecondary, textAlign: 'center' },
+    tableCardName: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    tableCardSummary: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
     newTableForm: { gap: 10 },
     newTableActions: { flexDirection: 'row', gap: 10 },
     flexBtn: { flex: 1 },

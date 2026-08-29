@@ -32,9 +32,9 @@ export default function Checkbox({ checked, onPress, label }: Props) {
           overflow: 'hidden',
         }}>
         {checked && <GradientSurface colors={gradients.accent} sheen={false} style={StyleSheet.absoluteFill} />}
-        {checked ? <Text style={{ color: colors.accentText, fontWeight: font.weight.bold, fontSize: 13 }}>✓</Text> : null}
+        {checked ? <Text style={{ color: colors.accentText, fontFamily: font.family.bold, fontWeight: font.weight.bold, fontSize: 13 }}>✓</Text> : null}
       </View>
-      <Text style={{ fontSize: font.size.md, color: colors.textPrimary }}>{label}</Text>
+      <Text style={{ fontSize: font.size.md, fontFamily: font.family.regular, color: colors.textPrimary }}>{label}</Text>
     </Pressable>
   );
 }

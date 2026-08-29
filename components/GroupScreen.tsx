@@ -250,7 +250,7 @@ const createStyles = (theme: Theme) =>
     content: { padding: 20, gap: 12 },
     error: { color: theme.colors.danger, textAlign: 'center', marginBottom: 12 },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    sectionTitle: { fontSize: theme.font.size.md, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary },
+    sectionTitle: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary },
     empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
     groupGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
     // Variant C's badge chip straddles a card's bottom edge — extra
@@ -259,11 +259,11 @@ const createStyles = (theme: Theme) =>
     groupCard: { width: '47%' },
     // Name at top, member count in the middle, a few names below —
     // one centered block rather than an icon-led layout.
-    groupCardName: { fontSize: theme.font.size.md, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
-    groupCardCount: { fontSize: theme.font.size.sm, fontWeight: theme.font.weight.bold, color: theme.colors.accent, textAlign: 'center' },
-    groupCardMembers: { fontSize: theme.font.size.xs, color: theme.colors.textSecondary, textAlign: 'center' },
-    modalTitle: { fontSize: theme.font.size.lg, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
-    modalLine: { fontSize: theme.font.size.sm, color: theme.colors.textPrimary },
+    groupCardName: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    groupCardCount: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.accent, textAlign: 'center' },
+    groupCardMembers: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
+    modalTitle: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
+    modalLine: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, color: theme.colors.textPrimary },
     checkboxList: { maxHeight: 220 },
     modalActions: { flexDirection: 'row', gap: 10 },
     flexBtn: { flex: 1 },
