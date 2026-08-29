@@ -21,13 +21,19 @@
  * state though, since they're global (not part of the table's sheet).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import Button from './ui/Button';
+import Card from './ui/Card';
+import IconButton from './ui/IconButton';
+import TextField from './ui/TextField';
 import { inviteToAccount } from '../lib/accountsApi';
 import { displayName } from '../lib/displayName';
 import { grantPermission } from '../lib/googleDriveApi';
 import { PokerLedgerService, type Player, type TableInfoData } from '../lib/pokerActions';
 import { addSheetToAccount, createAccount, listAccounts, type PlayerAccount } from '../lib/playerAccounts';
+import { useTheme } from '../theme/ThemeProvider';
+import type { Theme } from '../theme/tokens';
 
 type Props = {
   spreadsheetId: string;
@@ -40,6 +46,8 @@ type Props = {
 };
 
 export default function TableScreen({ spreadsheetId, userId, tableName, getAccessToken, players, tableInfo, onChanged }: Props) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
   const useAlias = tableInfo?.useAlias ?? false;
@@ -150,57 +158,46 @@ export default function TableScreen({ spreadsheetId, userId, tableName, getAcces
       <View style={styles.headerRow}>
         <Text style={styles.sectionTitle}>Players</Text>
         <View style={styles.headerActions}>
-          <Pressable style={[styles.aliasToggle, useAlias && styles.aliasToggleActive]} disabled={togglingAlias} onPress={handleToggleAlias}>
-            {togglingAlias ? (
-              <ActivityIndicator size="small" color={useAlias ? '#fff' : '#2f95dc'} />
-            ) : (
-              <Text style={[styles.aliasToggleText, useAlias && styles.aliasToggleTextActive]}>Use alias</Text>
-            )}
+          <Pressable
+            style={[styles.aliasToggle, useAlias && { backgroundColor: theme.colors.accent }]}
+            disabled={togglingAlias}
+            onPress={handleToggleAlias}>
+            <Text style={[styles.aliasToggleText, useAlias && { color: theme.colors.accentText }]}>Use alias</Text>
           </Pressable>
-          <Pressable style={styles.refreshBtn} onPress={onChanged}>
-            <Text style={styles.refreshBtnText}>⟳</Text>
-          </Pressable>
+          <IconButton icon="⟳" onPress={onChanged} />
         </View>
       </View>
       {players.length === 0 ? (
         <Text style={styles.empty}>No players yet.</Text>
       ) : (
         players.map((p) => (
-          <View key={p.row} style={styles.playerRow}>
+          <Card key={p.row} style={styles.playerRow}>
             <Text style={styles.playerName}>{displayName(p, useAlias)}</Text>
             <Text style={styles.playerEmail}>{p.email || '—'}</Text>
-          </View>
+          </Card>
         ))
       )}
 
       <Text style={styles.sectionTitle}>Add Player</Text>
-      <TextInput
-        style={styles.input}
-        value={search}
-        onChangeText={setSearch}
-        placeholder="Search accounts by alias or email"
-        autoCapitalize="none"
-      />
+      <TextField value={search} onChangeText={setSearch} placeholder="Search accounts by alias or email" autoCapitalize="none" />
       {accounts === null ? (
-        <ActivityIndicator />
+        <Text style={styles.empty}>Loading accounts…</Text>
       ) : filteredAccounts.length === 0 ? (
         <Text style={styles.empty}>No matching accounts.</Text>
       ) : (
         filteredAccounts.map((a) => {
           const alreadyOnTable = a.allSheets.includes(spreadsheetId);
           return (
-            <Pressable
-              key={a.id}
-              style={[styles.accountRow, alreadyOnTable && styles.accountRowDisabled]}
-              disabled={alreadyOnTable || adding}
-              onPress={() => addAccountToTable(a)}>
-              <View style={styles.accountInfo}>
-                <Text style={styles.accountAlias}>{a.alias || a.name}</Text>
-                <Text style={styles.accountDetail}>
-                  {a.name} · {a.email}
-                </Text>
-              </View>
-              {alreadyOnTable ? <Text style={styles.accountBadge}>Already on this table</Text> : null}
+            <Pressable key={a.id} disabled={alreadyOnTable || adding} onPress={() => addAccountToTable(a)}>
+              <Card style={styles.playerRow} highlighted={alreadyOnTable}>
+                <View style={styles.accountInfo}>
+                  <Text style={styles.playerName}>{a.alias || a.name}</Text>
+                  <Text style={styles.playerEmail}>
+                    {a.name} · {a.email}
+                  </Text>
+                </View>
+                {alreadyOnTable ? <Text style={styles.accountBadge}>Already on this table</Text> : null}
+              </Card>
             </Pressable>
           );
         })
@@ -208,100 +205,57 @@ export default function TableScreen({ spreadsheetId, userId, tableName, getAcces
 
       {showNewAccount ? (
         <View style={styles.newAccountForm}>
-          <TextInput style={styles.input} value={newName} onChangeText={setNewName} placeholder="Name" autoCapitalize="words" />
-          <TextInput
-            style={styles.input}
-            value={newEmail}
-            onChangeText={setNewEmail}
-            placeholder="Email"
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <TextInput style={styles.input} value={newAlias} onChangeText={setNewAlias} placeholder="Alias (optional)" autoCapitalize="words" />
+          <TextField value={newName} onChangeText={setNewName} placeholder="Name" autoCapitalize="words" />
+          <TextField value={newEmail} onChangeText={setNewEmail} placeholder="Email" autoCapitalize="none" keyboardType="email-address" />
+          <TextField value={newAlias} onChangeText={setNewAlias} placeholder="Alias (optional)" autoCapitalize="words" />
           <View style={styles.newAccountActions}>
-            <Pressable style={styles.primaryBtn} disabled={adding || !newName.trim() || !newEmail.trim()} onPress={handleCreateAndAdd}>
-              {adding ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create & Add</Text>}
-            </Pressable>
-            <Pressable style={styles.secondaryBtn} disabled={adding} onPress={() => setShowNewAccount(false)}>
-              <Text style={styles.secondaryBtnText}>Cancel</Text>
-            </Pressable>
+            <Button
+              label="Create & Add"
+              loading={adding}
+              disabled={adding || !newName.trim() || !newEmail.trim()}
+              onPress={handleCreateAndAdd}
+              style={styles.flexBtn}
+            />
+            <Button label="Cancel" variant="secondary" disabled={adding} onPress={() => setShowNewAccount(false)} style={styles.flexBtn} />
           </View>
         </View>
       ) : (
-        <Pressable style={styles.secondaryBtn} onPress={() => setShowNewAccount(true)}>
-          <Text style={styles.secondaryBtnText}>+ New Account</Text>
-        </Pressable>
+        <Button label="+ New Account" variant="secondary" onPress={() => setShowNewAccount(true)} />
       )}
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: 20, gap: 12 },
-  error: { color: '#c00', textAlign: 'center', marginBottom: 12 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  refreshBtn: { paddingVertical: 4, paddingHorizontal: 8 },
-  refreshBtnText: { color: '#2f95dc', fontWeight: '700', fontSize: 18 },
-  aliasToggle: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#2f95dc',
-    minWidth: 74,
-    alignItems: 'center',
-  },
-  aliasToggleActive: { backgroundColor: '#2f95dc' },
-  aliasToggleText: { color: '#2f95dc', fontWeight: '600', fontSize: 12 },
-  aliasToggleTextActive: { color: '#fff' },
-  sectionTitle: { fontSize: 15, fontWeight: '700', opacity: 0.6, marginTop: 8 },
-  empty: { opacity: 0.6, textAlign: 'center', marginVertical: 12 },
-  playerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#f4f4f4',
-    borderRadius: 10,
-  },
-  playerName: { fontSize: 16, fontWeight: '700' },
-  playerEmail: { fontSize: 13, opacity: 0.6 },
-  input: {
-    fontSize: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  accountRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#eef6fc',
-    borderRadius: 10,
-    gap: 8,
-  },
-  accountRowDisabled: { backgroundColor: '#eee', opacity: 0.6 },
-  accountInfo: { flex: 1, gap: 2 },
-  accountAlias: { fontSize: 15, fontWeight: '700' },
-  accountDetail: { fontSize: 12, opacity: 0.6 },
-  accountBadge: { fontSize: 11, fontWeight: '600', opacity: 0.6 },
-  newAccountForm: { gap: 10 },
-  newAccountActions: { flexDirection: 'row', gap: 10 },
-  primaryBtn: {
-    backgroundColor: '#2f95dc',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    flex: 1,
-  },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  secondaryBtn: { flex: 1, paddingVertical: 14, borderRadius: 10, backgroundColor: '#eee', alignItems: 'center' },
-  secondaryBtnText: { fontWeight: '600', fontSize: 14 },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    content: { padding: 20, gap: 12 },
+    error: { color: theme.colors.danger, textAlign: 'center', marginBottom: 12 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    aliasToggle: {
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: theme.radius.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.accent,
+      minWidth: 74,
+      alignItems: 'center',
+    },
+    aliasToggleText: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.accent },
+    sectionTitle: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary, marginTop: 8 },
+    empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
+    playerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+    },
+    accountInfo: { flex: 1, gap: 2 },
+    accountBadge: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, color: theme.colors.textSecondary },
+    playerName: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
+    playerEmail: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary },
+    newAccountForm: { gap: 10 },
+    newAccountActions: { flexDirection: 'row', gap: 10 },
+    flexBtn: { flex: 1 },
+  });

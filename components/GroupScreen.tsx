@@ -11,10 +11,21 @@
  *    via lib/pokerActions.ts#updateGroup.
  */
 import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import Button from './ui/Button';
+import CardButton from './ui/CardButton';
+import Checkbox from './ui/Checkbox';
+import IconButton from './ui/IconButton';
+import ModalCard from './ui/ModalCard';
+import TextField from './ui/TextField';
 import { displayName } from '../lib/displayName';
 import { PokerLedgerService, type GroupInfo, type Player } from '../lib/pokerActions';
+// Per-card colors turned off for now — see the commented `tint` prop
+// below; may want them back later.
+// import { cardTintFor } from '../theme/cardTints';
+import { useStyleVariant, useTheme } from '../theme/ThemeProvider';
+import type { Theme } from '../theme/tokens';
 
 type Props = {
   groups: GroupInfo[];
@@ -40,6 +51,9 @@ export default function GroupScreen({
   onBack,
   onChanged,
 }: Props) {
+  const theme = useTheme();
+  const styleVariant = useStyleVariant();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
 
@@ -148,199 +162,120 @@ export default function GroupScreen({
 
       <View style={styles.headerRow}>
         <Text style={styles.sectionTitle}>Groups</Text>
-        <Pressable style={styles.refreshBtn} onPress={onChanged}>
-          <Text style={styles.refreshBtnText}>⟳</Text>
-        </Pressable>
+        <IconButton icon="⟳" onPress={onChanged} />
       </View>
 
       {groups.length === 0 ? (
         <Text style={styles.empty}>No groups yet.</Text>
       ) : (
-        groups.map((group) => {
-          const selected = selectedGroupName === group.name;
-          return (
-            <Pressable
-              key={group.name}
-              style={styles.groupRow}
-              onPress={() => handleGroupPress(group)}
-              onLongPress={() => setInfoGroup(group)}
-              delayLongPress={500}>
-              <View style={styles.groupInfo}>
-                <Text style={styles.groupName}>{group.name}</Text>
-                <Text style={styles.groupMembers}>{group.members.map(memberLabel).join(', ') || 'No members'}</Text>
-              </View>
-              <View style={[styles.addBtn, selected && styles.addBtnActive]}>
-                <Text style={styles.addBtnText}>+</Text>
-              </View>
-            </Pressable>
-          );
-        })
+        <View style={[styles.groupGrid, styleVariant === 'C' && styles.gridRowGapForBadges]}>
+          {groups.map((group, i) => {
+            const selected = selectedGroupName === group.name;
+            return (
+              <CardButton
+                key={group.name}
+                selected={selected}
+                onPress={() => handleGroupPress(group)}
+                onLongPress={() => setInfoGroup(group)}
+                delayLongPress={500}
+                // Per-card colors turned off for now — may want them
+                // back later, see theme/cardTints.ts.
+                // tint={cardTintFor(i)}
+                badge="GROUP"
+                style={styles.groupCard}>
+                <Text style={styles.groupCardName} numberOfLines={1}>
+                  {selected ? '✓ ' : ''}
+                  {group.name}
+                </Text>
+                <Text style={styles.groupCardCount}>
+                  {group.members.length} member{group.members.length === 1 ? '' : 's'}
+                </Text>
+                <Text style={styles.groupCardMembers} numberOfLines={2}>
+                  {group.members.map(memberLabel).join(', ') || 'No members'}
+                </Text>
+              </CardButton>
+            );
+          })}
+        </View>
       )}
 
-      <Pressable style={styles.newGroupBtn} onPress={() => setShowNewGroup(true)}>
-        <Text style={styles.newGroupBtnText}>+ New Group</Text>
-      </Pressable>
+      <Button label="+ New Group" variant="secondary" onPress={() => setShowNewGroup(true)} />
 
-      <Pressable style={styles.backBtn} onPress={onBack}>
-        <Text style={styles.backBtnText}>Return to table screen</Text>
-      </Pressable>
+      <Button label="Return to table screen" onPress={onBack} />
 
       {/* New group popup */}
-      <Modal visible={showNewGroup} transparent animationType="fade" onRequestClose={() => setShowNewGroup(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>New Group</Text>
-            <TextInput
-              style={styles.input}
-              value={newGroupTitle}
-              onChangeText={setNewGroupTitle}
-              placeholder="Group title"
-              autoFocus
-            />
-            <ScrollView style={styles.checkboxList}>
-              {players.map((p) => {
-                const checked = checkedPlayers.has(p.name);
-                return (
-                  <Pressable key={p.row} style={styles.checkboxRow} onPress={() => toggleChecked(p.name)}>
-                    <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-                      {checked ? <Text style={styles.checkboxMark}>✓</Text> : null}
-                    </View>
-                    <Text style={styles.checkboxLabel}>{displayName(p, useAlias)}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-            <View style={styles.modalActions}>
-              <Pressable style={styles.primaryBtn} disabled={creating || !newGroupTitle.trim()} onPress={handleCreateGroup}>
-                <Text style={styles.primaryBtnText}>{creating ? 'Creating…' : 'Create'}</Text>
-              </Pressable>
-              <Pressable style={styles.secondaryBtn} disabled={creating} onPress={() => setShowNewGroup(false)}>
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
-              </Pressable>
-            </View>
-          </View>
+      <ModalCard visible={showNewGroup} onRequestClose={() => setShowNewGroup(false)}>
+        <Text style={styles.modalTitle}>New Group</Text>
+        <TextField value={newGroupTitle} onChangeText={setNewGroupTitle} placeholder="Group title" autoFocus />
+        <ScrollView style={styles.checkboxList}>
+          {players.map((p) => (
+            <Checkbox key={p.row} checked={checkedPlayers.has(p.name)} onPress={() => toggleChecked(p.name)} label={displayName(p, useAlias)} />
+          ))}
+        </ScrollView>
+        <View style={styles.modalActions}>
+          <Button
+            label={creating ? 'Creating…' : 'Create'}
+            disabled={creating || !newGroupTitle.trim()}
+            onPress={handleCreateGroup}
+            style={styles.flexBtn}
+          />
+          <Button label="Cancel" variant="secondary" disabled={creating} onPress={() => setShowNewGroup(false)} style={styles.flexBtn} />
         </View>
-      </Modal>
+      </ModalCard>
 
       {/* Long-press info popup (read-only) */}
-      <Modal visible={infoGroup !== null} transparent animationType="fade" onRequestClose={() => setInfoGroup(null)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setInfoGroup(null)}>
-          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>{infoGroup?.name}</Text>
-            {(infoGroup?.members.length ?? 0) === 0 ? (
-              <Text style={styles.modalLine}>No members.</Text>
-            ) : (
-              infoGroup?.members.map((m) => (
-                <Text key={m} style={styles.modalLine}>
-                  {memberLabel(m)}
-                </Text>
-              ))
-            )}
-            <Pressable style={styles.primaryBtn} onPress={() => setInfoGroup(null)}>
-              <Text style={styles.primaryBtnText}>Close</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+      <ModalCard visible={infoGroup !== null} onRequestClose={() => setInfoGroup(null)}>
+        <Text style={styles.modalTitle}>{infoGroup?.name}</Text>
+        {(infoGroup?.members.length ?? 0) === 0 ? (
+          <Text style={styles.modalLine}>No members.</Text>
+        ) : (
+          infoGroup?.members.map((m) => (
+            <Text key={m} style={styles.modalLine}>
+              {memberLabel(m)}
+            </Text>
+          ))
+        )}
+        <Button label="Close" onPress={() => setInfoGroup(null)} />
+      </ModalCard>
 
       {/* Double-tap edit popup */}
-      <Modal visible={editGroup !== null} transparent animationType="fade" onRequestClose={() => setEditGroup(null)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Group</Text>
-            <TextInput style={styles.input} value={editTitle} onChangeText={setEditTitle} placeholder="Group title" />
-            <ScrollView style={styles.checkboxList}>
-              {players.map((p) => {
-                const checked = editChecked.has(p.name);
-                return (
-                  <Pressable key={p.row} style={styles.checkboxRow} onPress={() => toggleEditChecked(p.name)}>
-                    <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-                      {checked ? <Text style={styles.checkboxMark}>✓</Text> : null}
-                    </View>
-                    <Text style={styles.checkboxLabel}>{displayName(p, useAlias)}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-            <View style={styles.modalActions}>
-              <Pressable style={styles.primaryBtn} disabled={saving || !editTitle.trim()} onPress={handleSaveEdit}>
-                <Text style={styles.primaryBtnText}>{saving ? 'Saving…' : 'Save'}</Text>
-              </Pressable>
-              <Pressable style={styles.secondaryBtn} disabled={saving} onPress={() => setEditGroup(null)}>
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
-              </Pressable>
-            </View>
-          </View>
+      <ModalCard visible={editGroup !== null} onRequestClose={() => setEditGroup(null)}>
+        <Text style={styles.modalTitle}>Edit Group</Text>
+        <TextField value={editTitle} onChangeText={setEditTitle} placeholder="Group title" />
+        <ScrollView style={styles.checkboxList}>
+          {players.map((p) => (
+            <Checkbox key={p.row} checked={editChecked.has(p.name)} onPress={() => toggleEditChecked(p.name)} label={displayName(p, useAlias)} />
+          ))}
+        </ScrollView>
+        <View style={styles.modalActions}>
+          <Button label={saving ? 'Saving…' : 'Save'} disabled={saving || !editTitle.trim()} onPress={handleSaveEdit} style={styles.flexBtn} />
+          <Button label="Cancel" variant="secondary" disabled={saving} onPress={() => setEditGroup(null)} style={styles.flexBtn} />
         </View>
-      </Modal>
+      </ModalCard>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: 20, gap: 12 },
-  error: { color: '#c00', textAlign: 'center', marginBottom: 12 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionTitle: { fontSize: 15, fontWeight: '700', opacity: 0.6 },
-  refreshBtn: { paddingVertical: 4, paddingHorizontal: 8 },
-  refreshBtnText: { color: '#2f95dc', fontWeight: '700', fontSize: 18 },
-  empty: { opacity: 0.6, textAlign: 'center', marginVertical: 12 },
-  groupRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#f4f4f4',
-    borderRadius: 10,
-  },
-  groupInfo: { flex: 1, gap: 2 },
-  groupName: { fontSize: 16, fontWeight: '700' },
-  groupMembers: { fontSize: 13, opacity: 0.6 },
-  addBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#2f95dc',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addBtnActive: { backgroundColor: '#2a7a2a' },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 18 },
-  newGroupBtn: { paddingVertical: 12, borderRadius: 10, backgroundColor: '#eee', alignItems: 'center' },
-  newGroupBtnText: { fontWeight: '600', fontSize: 14 },
-  backBtn: { paddingVertical: 14, borderRadius: 10, backgroundColor: '#2f95dc', alignItems: 'center' },
-  backBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
-  modalCard: { backgroundColor: '#fff', borderRadius: 12, padding: 20, width: '85%', maxHeight: '80%', gap: 10 },
-  modalTitle: { fontSize: 17, fontWeight: '700' },
-  modalLine: { fontSize: 14 },
-  input: {
-    fontSize: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  checkboxList: { maxHeight: 220 },
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: '#2f95dc',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: { backgroundColor: '#2f95dc' },
-  checkboxMark: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  checkboxLabel: { fontSize: 15 },
-  modalActions: { flexDirection: 'row', gap: 10 },
-  primaryBtn: { flex: 1, backgroundColor: '#2f95dc', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  primaryBtnText: { color: '#fff', fontWeight: '700' },
-  secondaryBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#eee', alignItems: 'center' },
-  secondaryBtnText: { fontWeight: '600' },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    content: { padding: 20, gap: 12 },
+    error: { color: theme.colors.danger, textAlign: 'center', marginBottom: 12 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    sectionTitle: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary },
+    empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
+    groupGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    // Variant C's badge chip straddles a card's bottom edge — extra
+    // row spacing so it doesn't run into the next row's cards.
+    gridRowGapForBadges: { rowGap: 24 },
+    groupCard: { width: '47%' },
+    // Name at top, member count in the middle, a few names below —
+    // one centered block rather than an icon-led layout.
+    groupCardName: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    groupCardCount: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.accent, textAlign: 'center' },
+    groupCardMembers: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
+    modalTitle: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
+    modalLine: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, color: theme.colors.textPrimary },
+    checkboxList: { maxHeight: 220 },
+    modalActions: { flexDirection: 'row', gap: 10 },
+    flexBtn: { flex: 1 },
+  });

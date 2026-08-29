@@ -6,9 +6,15 @@
  * not here.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import Button from './ui/Button';
+import Card from './ui/Card';
+import IconButton from './ui/IconButton';
+import TextField from './ui/TextField';
 import { createAccount, listAccounts, type PlayerAccount } from '../lib/playerAccounts';
+import { useTheme } from '../theme/ThemeProvider';
+import type { Theme } from '../theme/tokens';
 
 type Props = {
   userId: string;
@@ -17,6 +23,8 @@ type Props = {
 };
 
 export default function PlayerAccountsScreen({ userId, getAccessToken, onBack }: Props) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [accounts, setAccounts] = useState<PlayerAccount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,7 +73,7 @@ export default function PlayerAccountsScreen({ userId, getAccessToken, onBack }:
 
   return (
     <View style={{ flex: 1 }}>
-      <Pressable style={styles.backLink} onPress={onBack}>
+      <Pressable style={({ pressed }) => [styles.backLink, pressed && styles.pressedDim]} onPress={onBack}>
         <Text style={styles.backLinkText}>‹ Tables</Text>
       </Pressable>
       <ScrollView contentContainerStyle={styles.content}>
@@ -73,78 +81,45 @@ export default function PlayerAccountsScreen({ userId, getAccessToken, onBack }:
 
         <View style={styles.headerRow}>
           <Text style={styles.sectionTitle}>Player Accounts</Text>
-          <Pressable style={styles.refreshBtn} onPress={load}>
-            <Text style={styles.refreshBtnText}>⟳</Text>
-          </Pressable>
+          <IconButton icon="⟳" onPress={load} />
         </View>
 
         {loading ? (
-          <ActivityIndicator />
+          <Text style={styles.empty}>Loading…</Text>
         ) : (accounts ?? []).length === 0 ? (
           <Text style={styles.empty}>No accounts yet.</Text>
         ) : (
           (accounts ?? []).map((a) => (
-            <View key={a.id} style={styles.accountRow}>
+            <Card key={a.id} style={styles.accountRow}>
               <Text style={styles.accountAlias}>{a.alias || a.name}</Text>
               <Text style={styles.accountDetail}>
                 {a.name} · {a.email}
               </Text>
-            </View>
+            </Card>
           ))
         )}
 
         <Text style={styles.sectionTitle}>New Account</Text>
-        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Name" autoCapitalize="words" />
-        <TextInput
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          placeholder="Email"
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TextInput style={styles.input} value={alias} onChangeText={setAlias} placeholder="Alias (optional)" autoCapitalize="words" />
-        <Pressable style={styles.primaryBtn} disabled={creating || !name.trim() || !email.trim()} onPress={handleCreate}>
-          {creating ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create Account</Text>}
-        </Pressable>
+        <TextField value={name} onChangeText={setName} placeholder="Name" autoCapitalize="words" />
+        <TextField value={email} onChangeText={setEmail} placeholder="Email" autoCapitalize="none" keyboardType="email-address" />
+        <TextField value={alias} onChangeText={setAlias} placeholder="Alias (optional)" autoCapitalize="words" />
+        <Button label="Create Account" loading={creating} disabled={creating || !name.trim() || !email.trim()} onPress={handleCreate} />
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  backLink: { paddingHorizontal: 20, paddingVertical: 12, paddingTop: 60 },
-  backLinkText: { color: '#2f95dc', fontWeight: '600', fontSize: 16 },
-  content: { padding: 20, gap: 12 },
-  error: { color: '#c00', textAlign: 'center', marginBottom: 12 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  refreshBtn: { paddingVertical: 4, paddingHorizontal: 8 },
-  refreshBtnText: { color: '#2f95dc', fontWeight: '700', fontSize: 18 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', opacity: 0.6, marginTop: 8 },
-  empty: { opacity: 0.6, textAlign: 'center', marginVertical: 12 },
-  accountRow: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#f4f4f4',
-    borderRadius: 10,
-    gap: 2,
-  },
-  accountAlias: { fontSize: 16, fontWeight: '700' },
-  accountDetail: { fontSize: 13, opacity: 0.6 },
-  input: {
-    fontSize: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  primaryBtn: {
-    backgroundColor: '#2f95dc',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    pressedDim: { opacity: 0.6 },
+    backLink: { paddingHorizontal: 20, paddingVertical: 12, paddingTop: 60 },
+    backLinkText: { color: theme.colors.accent, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.md },
+    content: { padding: 20, gap: 12 },
+    error: { color: theme.colors.danger, textAlign: 'center', marginBottom: 12 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    sectionTitle: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary, marginTop: 8 },
+    empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
+    accountRow: { paddingVertical: 12, paddingHorizontal: 16, gap: 2 },
+    accountAlias: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
+    accountDetail: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary },
+  });

@@ -1,11 +1,21 @@
+import { CormorantGaramond_400Regular, CormorantGaramond_500Medium, CormorantGaramond_700Bold, useFonts } from '@expo-google-fonts/cormorant-garamond';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import AllPlayersScreen from './components/AllPlayersScreen';
 import PlayerAccountsScreen from './components/PlayerAccountsScreen';
 import ScanClaimScreen from './components/ScanClaimScreen';
 import TableHome from './components/TableHome';
+import Button from './components/ui/Button';
+import CardButton from './components/ui/CardButton';
+import ModalCard from './components/ui/ModalCard';
+import StyleVariantToggle from './components/ui/StyleVariantToggle';
+import TextField from './components/ui/TextField';
+import ThemeToggle from './components/ui/ThemeToggle';
+import StaticPreview from './components/dev/StaticPreview';
 import { addOwnSheet, ensureOwnAccount, getOrCreateAppFolderId, removeStaleSheets } from './lib/accountsApi';
 import { createAppSheet, listAppSheets } from './lib/appSheet';
 import { GoogleAuthProvider } from './lib/auth/googleAuthProvider';
@@ -15,10 +25,49 @@ import { batchGetValues, getSpreadsheetMeta } from './lib/googleSheetsApi';
 import { PokerLedgerService } from './lib/pokerActions';
 import { APP_NAME, DEFAULT_SHEET_NAME, pokerLedgerSeed } from './lib/pokerLedgerSeed';
 import { removeLinkedSheet, type LinkedSheet } from './lib/sheetRegistry';
+import { cardTintFor } from './theme/cardTints';
+import { ThemeProvider, useStyleVariant, useTheme } from './theme/ThemeProvider';
+import type { Theme } from './theme/tokens';
 
 const auth = new GoogleAuthProvider();
 
+// Keeps the native splash up until the app's one font (theme/tokens.ts's
+// font.family — Cormorant Garamond, throughout) is ready, so nothing
+// ever flashes system-font-then-swaps.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    CormorantGaramond_400Regular,
+    CormorantGaramond_500Medium,
+    CormorantGaramond_700Bold,
+  });
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
+function AppContent() {
+  const theme = useTheme();
+  const styleVariant = useStyleVariant();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Bypasses sign-in/the Sheets backend entirely — see components/dev/StaticPreview.tsx.
+  const [staticPreview, setStaticPreview] = useState(false);
+
   const [user, setUser] = useState<AuthUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
@@ -284,83 +333,102 @@ export default function App() {
     }
   };
 
+  if (staticPreview) {
+    return <StaticPreview onExit={() => setStaticPreview(false)} />;
+  }
+
   if (checkingSession) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-        <StatusBar style="auto" />
-      </View>
+      <LinearGradient colors={theme.gradients.background} style={styles.center}>
+        <ActivityIndicator color={theme.colors.accent} />
+        {/* Reachable even if the session check itself is what's hanging/broken. */}
+        <Pressable onPress={() => setStaticPreview(true)}>
+          <Text style={styles.staticPreviewLink}>Static preview (no sign-in)</Text>
+        </Pressable>
+        <StatusBar style={theme.statusBarStyle} />
+      </LinearGradient>
     );
   }
 
   if (!user) {
     return (
-      <View style={styles.center}>
+      <LinearGradient colors={theme.gradients.background} style={styles.center}>
+        <View style={[styles.themeToggleFloating, styles.headerActions]}>
+          <ThemeToggle />
+          <StyleVariantToggle />
+        </View>
         <Text style={styles.title}>Poker Ledger</Text>
         <Text style={styles.subtitle}>Sign in to load your tables.</Text>
-        <Pressable style={styles.primaryBtn} disabled={signingIn} onPress={handleSignIn}>
-          {signingIn ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Sign in with Google</Text>}
-        </Pressable>
+        <Button label="Sign in with Google" onPress={handleSignIn} loading={signingIn} style={styles.signInBtn} />
         {signInMessage ? <Text style={styles.error}>{signInMessage}</Text> : null}
-        <StatusBar style="auto" />
-      </View>
+        <Pressable onPress={() => setStaticPreview(true)}>
+          <Text style={styles.staticPreviewLink}>Static preview (no sign-in)</Text>
+        </Pressable>
+        <StatusBar style={theme.statusBarStyle} />
+      </LinearGradient>
     );
   }
 
   if (showAccountsScreen) {
     return (
-      <View style={styles.container}>
+      <LinearGradient colors={theme.gradients.background} style={styles.container}>
         <PlayerAccountsScreen userId={user.id} getAccessToken={() => auth.getAccessToken()} onBack={() => setShowAccountsScreen(false)} />
-        <StatusBar style="auto" />
-      </View>
+        <StatusBar style={theme.statusBarStyle} />
+      </LinearGradient>
     );
   }
 
   if (selectedSpreadsheetId) {
     return (
-      <View style={styles.container}>
+      <LinearGradient colors={theme.gradients.background} style={styles.container}>
         <View style={styles.header}>
           <Pressable onPress={() => setSelectedSpreadsheetId(null)}>
             <Text style={styles.backText}>‹ Tables</Text>
           </Pressable>
-          <Pressable onPress={handleSignOut}>
-            <Text style={styles.signOutText}>Sign out</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <ThemeToggle />
+            <StyleVariantToggle />
+            <Pressable onPress={handleSignOut}>
+              <Text style={styles.signOutText}>Sign out</Text>
+            </Pressable>
+          </View>
         </View>
         <TableHome spreadsheetId={selectedSpreadsheetId} userId={user.id} getAccessToken={() => auth.getAccessToken()} />
-        <StatusBar style="auto" />
-      </View>
+        <StatusBar style={theme.statusBarStyle} />
+      </LinearGradient>
     );
   }
 
   if (showAllPlayers) {
     return (
-      <View style={styles.container}>
+      <LinearGradient colors={theme.gradients.background} style={styles.container}>
         <AllPlayersScreen
           tables={tables ?? []}
           getAccessToken={() => auth.getAccessToken()}
           hostEmail={user.email ?? ''}
           onBack={() => setShowAllPlayers(false)}
         />
-        <StatusBar style="auto" />
-      </View>
+        <StatusBar style={theme.statusBarStyle} />
+      </LinearGradient>
     );
   }
 
   if (showScanClaim) {
     return (
-      <View style={styles.container}>
+      <LinearGradient colors={theme.gradients.background} style={styles.container}>
         <ScanClaimScreen onBack={() => setShowScanClaim(false)} />
-        <StatusBar style="auto" />
-      </View>
+        <StatusBar style={theme.statusBarStyle} />
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <LinearGradient colors={theme.gradients.background} style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{user.displayName || user.email || 'Poker Ledger'}</Text>
         <View style={styles.headerActions}>
+          <ThemeToggle />
+          <StyleVariantToggle />
           <Pressable onPress={() => setShowScanClaim(true)}>
             <Text style={styles.headerLinkText}>Scan</Text>
           </Pressable>
@@ -371,7 +439,7 @@ export default function App() {
             <Text style={styles.headerLinkText}>Player Accounts</Text>
           </Pressable>
           <Pressable style={styles.refreshBtn} onPress={loadTables} onLongPress={handleVerifySheets} delayLongPress={500}>
-            {verifying ? <ActivityIndicator size="small" color="#2f95dc" /> : <Text style={styles.refreshBtnText}>⟳</Text>}
+            {verifying ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text style={styles.refreshBtnText}>⟳</Text>}
           </Pressable>
           <Pressable onPress={handleSignOut}>
             <Text style={styles.signOutText}>Sign out</Text>
@@ -382,207 +450,194 @@ export default function App() {
       {tablesError ? (
         <View style={styles.center}>
           <Text style={styles.error}>{tablesError}</Text>
-          <Pressable style={styles.primaryBtn} onPress={loadTables}>
-            <Text style={styles.primaryBtnText}>Retry</Text>
-          </Pressable>
+          <Button label="Retry" onPress={loadTables} style={styles.retryBtn} />
         </View>
       ) : tables === null ? (
         <View style={styles.center}>
-          <ActivityIndicator />
+          <ActivityIndicator color={theme.colors.accent} />
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           {tables.length === 0 ? (
             <Text style={styles.empty}>No tables yet.</Text>
           ) : (
-            tables.map((table) => (
-              <Pressable key={table.id} style={styles.tableRow} onPress={() => setSelectedSpreadsheetId(table.spreadsheetId)}>
-                <Text style={styles.tableName}>{table.name}</Text>
-                {(tableSummaries[table.spreadsheetId] ?? []).length > 0 ? (
-                  <Text style={styles.tableSummary}>{tableSummaries[table.spreadsheetId].join(' · ')}</Text>
-                ) : null}
-              </Pressable>
-            ))
+            <View style={[styles.tableGrid, styleVariant === 'C' && styles.gridRowGapForBadges]}>
+              {tables.map((table, i) => (
+                <CardButton
+                  key={table.id}
+                  onPress={() => setSelectedSpreadsheetId(table.spreadsheetId)}
+                  tint={cardTintFor(i)}
+                  badge="TABLE"
+                  style={styles.tableCard}>
+                  <Text style={styles.tableCardIcon}>♠</Text>
+                  <View style={styles.tableCardBody}>
+                    <Text style={styles.tableCardName} numberOfLines={2}>
+                      {table.name}
+                    </Text>
+                    {(tableSummaries[table.spreadsheetId] ?? []).length > 0 ? (
+                      <Text style={styles.tableCardSummary} numberOfLines={2}>
+                        {tableSummaries[table.spreadsheetId].join(' · ')}
+                      </Text>
+                    ) : null}
+                  </View>
+                </CardButton>
+              ))}
+            </View>
           )}
 
           {showNewTableForm ? (
             <View style={styles.newTableForm}>
-              <TextInput
-                style={styles.input}
+              <TextField
                 value={newTableName}
                 onChangeText={setNewTableName}
                 placeholder={tables.length === 0 ? DEFAULT_SHEET_NAME : 'New table name'}
                 autoFocus
               />
               <View style={styles.newTableActions}>
-                <Pressable
-                  style={styles.primaryBtn}
+                <Button
+                  label="Create"
+                  loading={creatingTable}
+                  onPress={() => handleCreateTable(newTableName.trim() || DEFAULT_SHEET_NAME)}
+                  style={styles.flexBtn}
+                />
+                <Button
+                  label="Cancel"
+                  variant="secondary"
                   disabled={creatingTable}
-                  onPress={() => handleCreateTable(newTableName.trim() || DEFAULT_SHEET_NAME)}>
-                  {creatingTable ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create</Text>}
-                </Pressable>
-                <Pressable style={styles.secondaryBtn} disabled={creatingTable} onPress={() => setShowNewTableForm(false)}>
-                  <Text style={styles.secondaryBtnText}>Cancel</Text>
-                </Pressable>
+                  onPress={() => setShowNewTableForm(false)}
+                  style={styles.flexBtn}
+                />
               </View>
             </View>
           ) : (
-            <Pressable style={styles.primaryBtn} onPress={() => setShowNewTableForm(true)}>
-              <Text style={styles.primaryBtnText}>{tables.length === 0 ? 'Create your first table' : '+ New Table'}</Text>
-            </Pressable>
+            <Button
+              label={tables.length === 0 ? 'Create your first table' : '+ New Table'}
+              onPress={() => setShowNewTableForm(true)}
+            />
           )}
         </ScrollView>
       )}
 
-      <Modal visible={verifyMessage !== null} transparent animationType="fade" onRequestClose={() => setVerifyMessage(null)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setVerifyMessage(null)}>
-          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>Verified</Text>
-            <Text style={styles.modalLine}>{verifyMessage}</Text>
-            <Pressable style={styles.primaryBtn} onPress={() => setVerifyMessage(null)}>
-              <Text style={styles.primaryBtnText}>OK</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+      <ModalCard visible={verifyMessage !== null} onRequestClose={() => setVerifyMessage(null)}>
+        <Text style={styles.modalTitle}>Verified</Text>
+        <Text style={styles.modalLine}>{verifyMessage}</Text>
+        <Button label="OK" onPress={() => setVerifyMessage(null)} />
+      </ModalCard>
 
-      <Modal
-        visible={claimProcessedMessage !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setClaimProcessedMessage(null)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setClaimProcessedMessage(null)}>
-          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>Claim{claimProcessedMessage?.includes('\n') ? 's' : ''} processed</Text>
-            <Text style={styles.modalLine}>{claimProcessedMessage}</Text>
-            <Pressable style={styles.primaryBtn} onPress={() => setClaimProcessedMessage(null)}>
-              <Text style={styles.primaryBtnText}>OK</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+      <ModalCard visible={claimProcessedMessage !== null} onRequestClose={() => setClaimProcessedMessage(null)}>
+        <Text style={styles.modalTitle}>Claim{claimProcessedMessage?.includes('\n') ? 's' : ''} processed</Text>
+        <Text style={styles.modalLine}>{claimProcessedMessage}</Text>
+        <Button label="OK" onPress={() => setClaimProcessedMessage(null)} />
+      </ModalCard>
 
-      <Modal visible={staleToConfirm !== null} transparent animationType="fade" onRequestClose={() => setStaleToConfirm(null)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setStaleToConfirm(null)}>
-          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>Some tables are stale</Text>
-            <Text style={styles.modalLine}>These no longer exist or aren't reachable:</Text>
-            {(staleToConfirm ?? []).map((s) => (
-              <Text key={s.spreadsheetId} style={styles.modalLine}>
-                • {s.name || s.spreadsheetId}
-              </Text>
-            ))}
-            <View style={styles.newTableActions}>
-              <Pressable style={styles.secondaryBtn} disabled={removingStale} onPress={() => setStaleToConfirm(null)}>
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.primaryBtn} disabled={removingStale} onPress={handleConfirmRemoveStale}>
-                {removingStale ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Remove</Text>}
-              </Pressable>
-            </View>
-          </View>
-        </Pressable>
-      </Modal>
+      <ModalCard visible={staleToConfirm !== null} onRequestClose={() => setStaleToConfirm(null)}>
+        <Text style={styles.modalTitle}>Some tables are stale</Text>
+        <Text style={styles.modalLine}>These no longer exist or aren't reachable:</Text>
+        {(staleToConfirm ?? []).map((s) => (
+          <Text key={s.spreadsheetId} style={styles.modalLine}>
+            • {s.name || s.spreadsheetId}
+          </Text>
+        ))}
+        <View style={styles.newTableActions}>
+          <Button label="Cancel" variant="secondary" disabled={removingStale} onPress={() => setStaleToConfirm(null)} style={styles.flexBtn} />
+          <Button label="Remove" variant="danger" loading={removingStale} onPress={handleConfirmRemoveStale} style={styles.flexBtn} />
+        </View>
+      </ModalCard>
 
-      <StatusBar style="auto" />
-    </View>
+      <StatusBar style={theme.statusBarStyle} />
+    </LinearGradient>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    paddingTop: 60,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    gap: 16,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  headerLinkText: { color: '#2f95dc', fontWeight: '600', fontSize: 14 },
-  refreshBtn: { paddingVertical: 4, paddingHorizontal: 4 },
-  refreshBtnText: { color: '#2f95dc', fontWeight: '700', fontSize: 18 },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  subtitle: {
-    fontSize: 15,
-    opacity: 0.65,
-    textAlign: 'center',
-  },
-  backText: {
-    fontSize: 16,
-    color: '#2f95dc',
-    fontWeight: '600',
-  },
-  primaryBtn: {
-    backgroundColor: '#2f95dc',
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  primaryBtnText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  secondaryBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  secondaryBtnText: {
-    color: '#666',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  signOutText: {
-    color: '#d33',
-    fontWeight: '600',
-  },
-  error: {
-    color: '#c00',
-    textAlign: 'center',
-  },
-  list: { padding: 20, gap: 12 },
-  empty: { opacity: 0.6, textAlign: 'center', marginTop: 24 },
-  tableRow: {
-    backgroundColor: '#f4f4f4',
-    borderRadius: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 4,
-  },
-  tableName: { fontSize: 17, fontWeight: '700' },
-  tableSummary: { fontSize: 13, opacity: 0.6 },
-  newTableForm: { gap: 10 },
-  newTableActions: { flexDirection: 'row', gap: 10 },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
-  modalCard: { backgroundColor: '#fff', borderRadius: 12, padding: 20, width: '85%', gap: 10 },
-  modalTitle: { fontSize: 17, fontWeight: '700' },
-  modalLine: { fontSize: 14 },
-  input: {
-    fontSize: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+      paddingTop: 60,
+    },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      gap: 16,
+      backgroundColor: theme.colors.background,
+    },
+    themeToggleFloating: { position: 'absolute', top: 60, right: 20 },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingBottom: 16,
+      gap: 12,
+    },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    headerLinkText: {
+      fontSize: theme.font.size.sm,
+      fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
+      color: theme.colors.accent,
+    },
+    refreshBtn: { paddingVertical: 4, paddingHorizontal: 4 },
+    refreshBtnText: {
+      color: theme.colors.accent,
+      fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
+      fontSize: 18,
+    },
+    title: {
+      fontSize: theme.font.size.xl,
+      fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      fontSize: theme.font.size.md,
+      fontFamily: theme.font.family.regular,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
+    backText: {
+      fontSize: theme.font.size.lg,
+      color: theme.colors.accent,
+      fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
+    },
+    signInBtn: { minWidth: 220 },
+    staticPreviewLink: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textDecorationLine: 'underline' },
+    retryBtn: { minWidth: 160 },
+    signOutText: {
+      color: theme.colors.danger,
+      fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
+    },
+    error: { color: theme.colors.danger, textAlign: 'center' },
+    list: { padding: 20, gap: 16 },
+    empty: { color: theme.colors.textSecondary, textAlign: 'center', marginTop: 24 },
+    tableGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    // Variant C's badge chip straddles a card's bottom edge — extra
+    // row spacing so it doesn't run into the next row's cards.
+    gridRowGapForBadges: { rowGap: 24 },
+    tableCard: { width: '47%' },
+    tableCardIcon: {
+      fontSize: 34,
+      color: theme.colors.accent,
+      textAlign: 'center',
+      textShadowColor: 'rgba(0,0,0,0.3)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
+    },
+    tableCardBody: { gap: 4 },
+    tableCardName: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    tableCardSummary: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
+    newTableForm: { gap: 10 },
+    newTableActions: { flexDirection: 'row', gap: 10 },
+    flexBtn: { flex: 1 },
+    modalTitle: {
+      fontSize: theme.font.size.lg,
+      fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
+      color: theme.colors.textPrimary,
+    },
+    modalLine: {
+      fontSize: theme.font.size.sm,
+      fontFamily: theme.font.family.regular,
+      color: theme.colors.textSecondary,
+    },
+  });
