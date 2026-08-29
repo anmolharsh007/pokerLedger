@@ -20,7 +20,6 @@ import { StatusBar } from 'expo-status-bar';
 
 import TableHome from '../TableHome';
 import CardButton from '../ui/CardButton';
-import StyleVariantToggle from '../ui/StyleVariantToggle';
 import ThemeToggle from '../ui/ThemeToggle';
 import { getMockTableData, mockTables, mockTableSummaries } from '../../lib/dev/staticMockData';
 import { cardTintFor } from '../../theme/cardTints';
@@ -49,7 +48,6 @@ export default function StaticPreview({ onExit }: Props) {
         )}
         <View style={styles.headerActions}>
           <ThemeToggle />
-          <StyleVariantToggle />
           <Pressable onPress={onExit}>
             <Text style={styles.exitText}>Exit preview</Text>
           </Pressable>

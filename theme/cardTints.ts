@@ -1,6 +1,6 @@
 /**
  * A small rotating palette of bold per-card gradient fills — style
- * variant C's "colors" half (see Card's `tint` prop, StyleVariantToggle).
+ * variant C's "colors" half (see Card's `tint` prop).
  * Fixed colors, not theme-derived — the point is each card in a grid
  * reads as its own distinct identity, the way the reference stock art
  * used a different saturated color per card. ~90% opaque (the trailing

@@ -419,7 +419,10 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
 
       <View style={styles.fieldsRow}>
         <View style={styles.fieldCol}>
-          <Text style={[styles.fieldLabel, styles.fieldLabelMoney]}>Buy-in (₹)</Text>
+          <View style={styles.fieldLabelRow}>
+            <Text style={styles.fieldLabelMoneyIcon}>💰</Text>
+            <Text style={[styles.fieldLabel, styles.fieldLabelMoney]}>Buy-in (₹)</Text>
+          </View>
           <TextField
             style={[styles.fieldInputPill, styles.fieldInputPillMoney]}
             value={buyInText}
@@ -494,7 +497,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
           </View>
         ) : (
           <Button
-            label="Usual buy-in"
+            label="💰 Usual buy-in 🪙"
             variant="secondary"
             disabled={gameState !== 'none'}
             onPress={handleUsualPress}
@@ -537,14 +540,18 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
           disabled={!allPlusEnabled}
           onPress={handleAllPlus}>
           {allPlusEnabled && <GradientSurface colors={theme.gradients.accent} style={[StyleSheet.absoluteFill, { borderRadius: theme.radius.lg }]} />}
-          <Text style={[styles.gridTextA, !allPlusEnabled && styles.gridTextDisabled]}>👥 All+</Text>
+          <Text style={[styles.gridTextA, !allPlusEnabled && styles.gridTextDisabled]}>
+            ♣ All<Text style={[styles.plusStrong, !allPlusEnabled && styles.gridTextDisabled]}>+</Text>
+          </Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.gridBtnA, styles.gridPressableA, !groupPlusEnabled && styles.gridDisabled, groupPlusEnabled && pressed && styles.pressedDimSurface]}
           disabled={!groupPlusEnabled}
           onPress={() => (mock ? notInPreview('Group+') : setShowGroupScreen(true))}>
           {groupPlusEnabled && <GradientSurface colors={theme.gradients.accent} style={[StyleSheet.absoluteFill, { borderRadius: theme.radius.lg }]} />}
-          <Text style={[styles.gridTextA, !groupPlusEnabled && styles.gridTextDisabled]}>♣ Group+</Text>
+          <Text style={[styles.gridTextA, !groupPlusEnabled && styles.gridTextDisabled]}>
+            👥 Group<Text style={[styles.plusSoft, !groupPlusEnabled && styles.gridTextDisabled]}>+</Text>
+          </Text>
         </Pressable>
       </View>
 
@@ -710,6 +717,7 @@ const createStyles = (theme: Theme) =>
     // tint on each pill (label + fill) makes that legible at a glance,
     // same "tint over the neutral fill" trick as the multiplier buttons.
     fieldLabelMoney: { color: theme.colors.success },
+    fieldLabelMoneyIcon: { fontSize: 13 },
     fieldLabelChips: { color: CHIPS_COLOR },
     fieldLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     // Chip/token pill — fully rounded, filled, centered text, no
@@ -800,6 +808,14 @@ const createStyles = (theme: Theme) =>
     gridDisabled: { backgroundColor: theme.colors.surfaceAlt },
     gridBtnContentRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     gridTextA: { color: theme.colors.accentText, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.xl },
+    // All+ commits immediately (no navigation) — its "+" stays the same
+    // bold weight as the rest of the label. Group+ opens a picker
+    // screen instead of adding right away, so its "+" is deliberately
+    // lighter (regular weight/family — Cormorant Garamond needs its own
+    // file per weight, plain fontWeight alone won't do it — plus a
+    // touch of transparency) to read as the softer of the two actions.
+    plusStrong: { fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
+    plusSoft: { fontFamily: theme.font.family.regular, fontWeight: theme.font.weight.regular, opacity: 0.7 },
     gridTextB: { color: theme.colors.accentText, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.md },
     gridTextC: { color: theme.colors.accentText, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, fontSize: theme.font.size.xs },
     gridTextDisabled: { color: theme.colors.textSecondary },

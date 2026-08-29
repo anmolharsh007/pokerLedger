@@ -64,10 +64,12 @@ export const pokerLedgerSeed: SheetSeed = {
     { range: `${TABS.tableInfo}!A1:A3`, values: [['title'], ['Usual buy-in (₹)'], ['Usual buy-in (chips)']] },
     { range: `${TABS.tableInfo}!A6:B6`, values: [['use alias', 'false']] },
   ],
-  // The Drive file itself is now named Table<ID>.xlsx (an internal
-  // identifier, not the human name — see App.tsx#handleCreateTable),
-  // so the home screen's table list shows that as the bold name; this
-  // pulls the actual title (TableInfo!B1) back in as the summary line
-  // underneath so it's still readable there.
+  // The Drive file itself is named Table<ID>.xlsx (an internal
+  // identifier, not the human name — see App.tsx#handleCreateTable).
+  // The registry/Firestore `name` is normally already the human title
+  // too (handleCreateTable writes it there directly), but this is read
+  // back and preferred on the home screen's table list regardless, so
+  // a table linked before that was true (a stale filename-based local
+  // name) still displays correctly.
   listColumns: [{ label: 'Title', cell: `${TABS.tableInfo}!B1` }],
 };

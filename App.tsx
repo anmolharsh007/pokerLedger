@@ -12,7 +12,6 @@ import TableHome from './components/TableHome';
 import Button from './components/ui/Button';
 import CardButton from './components/ui/CardButton';
 import ModalCard from './components/ui/ModalCard';
-import StyleVariantToggle from './components/ui/StyleVariantToggle';
 import TextField from './components/ui/TextField';
 import ThemeToggle from './components/ui/ThemeToggle';
 import StaticPreview from './components/dev/StaticPreview';
@@ -355,7 +354,6 @@ function AppContent() {
       <LinearGradient colors={theme.gradients.background} style={styles.center}>
         <View style={[styles.themeToggleFloating, styles.headerActions]}>
           <ThemeToggle />
-          <StyleVariantToggle />
         </View>
         <Text style={styles.title}>Poker Ledger</Text>
         <Text style={styles.subtitle}>Sign in to load your tables.</Text>
@@ -387,7 +385,6 @@ function AppContent() {
           </Pressable>
           <View style={styles.headerActions}>
             <ThemeToggle />
-            <StyleVariantToggle />
             <Pressable onPress={handleSignOut}>
               <Text style={styles.signOutText}>Sign out</Text>
             </Pressable>
@@ -407,6 +404,10 @@ function AppContent() {
           getAccessToken={() => auth.getAccessToken()}
           hostEmail={user.email ?? ''}
           onBack={() => setShowAllPlayers(false)}
+          onOpenAccounts={() => {
+            setShowAllPlayers(false);
+            setShowAccountsScreen(true);
+          }}
         />
         <StatusBar style={theme.statusBarStyle} />
       </LinearGradient>
@@ -428,15 +429,16 @@ function AppContent() {
         <Text style={styles.title}>{user.displayName || user.email || 'Poker Ledger'}</Text>
         <View style={styles.headerActions}>
           <ThemeToggle />
-          <StyleVariantToggle />
           <Pressable onPress={() => setShowScanClaim(true)}>
             <Text style={styles.headerLinkText}>Scan</Text>
           </Pressable>
+          {/* Players and Player Accounts used to be two separate header
+              buttons — merged into one entry point. AllPlayersScreen
+              (the cross-table roster + QR-claim flow) carries a small
+              link of its own through to PlayerAccountsScreen (the
+              global reusable-profile directory) instead. */}
           <Pressable onPress={() => setShowAllPlayers(true)}>
             <Text style={styles.headerLinkText}>Players</Text>
-          </Pressable>
-          <Pressable onPress={() => setShowAccountsScreen(true)}>
-            <Text style={styles.headerLinkText}>Player Accounts</Text>
           </Pressable>
           <Pressable style={styles.refreshBtn} onPress={loadTables} onLongPress={handleVerifySheets} delayLongPress={500}>
             {verifying ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text style={styles.refreshBtnText}>⟳</Text>}
@@ -471,14 +473,15 @@ function AppContent() {
                   style={styles.tableCard}>
                   <Text style={styles.tableCardIcon}>♠</Text>
                   <View style={styles.tableCardBody}>
+                    {/* The real title (TableInfo!B1, read via tableSummaries)
+                        is the name to show — table.name can still be the
+                        generated Drive filename for a table linked before
+                        this device's registry/Firestore entry held the
+                        human-typed name. Falls back to table.name only
+                        while the title hasn't loaded yet (or is blank). */}
                     <Text style={styles.tableCardName} numberOfLines={2}>
-                      {table.name}
+                      {tableSummaries[table.spreadsheetId]?.[0] || table.name}
                     </Text>
-                    {(tableSummaries[table.spreadsheetId] ?? []).length > 0 ? (
-                      <Text style={styles.tableCardSummary} numberOfLines={2}>
-                        {tableSummaries[table.spreadsheetId].join(' · ')}
-                      </Text>
-                    ) : null}
                   </View>
                 </CardButton>
               ))}
@@ -626,7 +629,6 @@ const createStyles = (theme: Theme) =>
     },
     tableCardBody: { gap: 4 },
     tableCardName: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
-    tableCardSummary: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
     newTableForm: { gap: 10 },
     newTableActions: { flexDirection: 'row', gap: 10 },
     flexBtn: { flex: 1 },

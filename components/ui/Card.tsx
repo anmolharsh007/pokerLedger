@@ -24,9 +24,9 @@
  *
  * `highlighted` is a functional selected/filled state (Cash-ins' cards
  * with a staged buy-in, Cash-outs' cards with a chips value typed in)
- * — an accent border + tinted wash that applies in every style variant,
- * unlike `tint`/`badge` below (those are variant C's decorative "colors
- * and badges" only, see StyleVariantToggle).
+ * — an accent border + tinted wash that applies regardless, unlike
+ * `tint`/`badge` below (those are style variant C's own decorative
+ * "colors and badges" — see theme/ThemeProvider.tsx's `styleVariant`).
  * See CardButton for the pressable version of this same shape.
  */
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
