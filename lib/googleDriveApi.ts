@@ -110,28 +110,14 @@ export async function moveFileToFolder(fileId: string, folderId: string, accessT
   }
 }
 
-/**
- * Grants `email` real Drive access to `fileId` — this is the piece that
- * makes a player's own account actually able to read/write a table's
- * spreadsheet once they sign in, not just see it listed (that's
- * lib/accountsApi.ts's Firestore index, a separate concern — being
- * *listed* and being *allowed in* are independent of each other; this
- * is what closes the second half). Works even if `email` isn't a
- * Google Account yet: Drive still creates the grant and resolves it
- * once someone signs in/creates an account with that email later —
- * real-world, well-established Drive sharing behavior, though Google's
- * own API reference docs don't spell out this exact case explicitly.
- * `sendNotificationEmail=false` — this app conveys its own invite
- * (players-info + the in-app table list), not Drive's separate emailed
- * notification.
- */
-export async function grantPermission(
+async function createPermission(
   fileId: string,
   email: string,
   role: 'writer' | 'reader',
+  sendNotificationEmail: boolean,
   accessToken: string
 ): Promise<void> {
-  const params = new URLSearchParams({ sendNotificationEmail: 'false' });
+  const params = new URLSearchParams({ sendNotificationEmail: String(sendNotificationEmail) });
   const response = await fetch(`${DRIVE_FILES_URL}/${fileId}/permissions?${params.toString()}`, {
     method: 'POST',
     headers: {
@@ -142,6 +128,39 @@ export async function grantPermission(
   });
   if (!response.ok) {
     throw new DriveApiError(await extractErrorMessage(response, `Drive permission grant failed: ${response.status}`));
+  }
+}
+
+/**
+ * Grants `email` real Drive access to `fileId` — this is the piece that
+ * makes a player's own account actually able to read/write a table's
+ * spreadsheet once they sign in, not just see it listed (that's
+ * lib/accountsApi.ts's Firestore index, a separate concern — being
+ * *listed* and being *allowed in* are independent of each other; this
+ * is what closes the second half).
+ *
+ * Tries silently first (`sendNotificationEmail: false` — this app
+ * conveys its own invite, not Drive's separate emailed one). An earlier
+ * version of this comment claimed that always works even for an email
+ * with no Google Account yet; that turned out to be wrong — Drive
+ * rejects the silent grant outright in that case ("you must check the
+ * 'Notify people' box to invite this recipient"), confirmed by an
+ * actual 400 in the field, not just docs. So: retry once with
+ * notification email forced on before giving up. The grant itself
+ * still resolves once they sign up with that email either way — it's
+ * only the *silent* part that doesn't hold for a not-yet-a-Google-
+ * Account address.
+ */
+export async function grantPermission(
+  fileId: string,
+  email: string,
+  role: 'writer' | 'reader',
+  accessToken: string
+): Promise<void> {
+  try {
+    await createPermission(fileId, email, role, false, accessToken);
+  } catch {
+    await createPermission(fileId, email, role, true, accessToken);
   }
 }
 

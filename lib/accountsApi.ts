@@ -149,6 +149,20 @@ export async function ensureOwnAccount(email: string, displayName: string | null
  * configured, or a rules rejection) rather than blocking addPlayer —
  * the sheet write (players-info) is the source of truth either way;
  * this is a discovery convenience layered on top, not a critical path.
+ *
+ * Deliberately does NOT read the doc first to decide create-vs-update —
+ * firestore.rules only allows reading your *own* doc (privacy: no
+ * directory lookups by email), and this is invited on someone else's.
+ * Instead: try the update (append-only, always allowed on anyone's doc)
+ * first; if that fails — which is exactly what happens when the doc
+ * doesn't exist yet, since Firestore has nothing to update — fall back
+ * to creating it. The fallback uses `arrayUnion`+`merge:true` (not a
+ * bare `sheets: [sheet]` overwrite) so a race with a *second* concurrent
+ * inviter (two hosts adding the same new email around the same time)
+ * can't clobber the other's write — worst case on a genuine race, the
+ * rules themselves reject the losing fallback (its uuid/createdAt won't
+ * match what's already there) and it's logged, not silently corrupting
+ * anything.
  */
 export async function inviteToAccount(email: string, sheet: SheetEntry): Promise<void> {
   if (!isFirebaseConfigured() || !email.trim()) return;
@@ -157,24 +171,20 @@ export async function inviteToAccount(email: string, sheet: SheetEntry): Promise
 
   const ref = doc(getDb(), 'accounts', docIdForEmail(email));
   try {
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
-      await setDoc(ref, {
-        uuid: newUuid(),
-        hasSignedIn: false,
-        sheets: [sheet],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      await updateDoc(ref, { sheets: arrayUnion(sheet), updatedAt: serverTimestamp() });
-    }
+    await updateDoc(ref, { sheets: arrayUnion(sheet), updatedAt: serverTimestamp() });
   } catch (err) {
-    // Most likely: two hosts inviting the same brand-new email at
-    // once (the getDoc/create race) — one create wins, retry as an
-    // update. Anything else (rules rejection, offline) just logs.
     try {
-      await updateDoc(ref, { sheets: arrayUnion(sheet), updatedAt: serverTimestamp() });
+      await setDoc(
+        ref,
+        {
+          uuid: newUuid(),
+          hasSignedIn: false,
+          sheets: arrayUnion(sheet),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
     } catch (retryErr) {
       console.warn('inviteToAccount failed (table list will still work via the sheet itself):', err, retryErr);
     }
