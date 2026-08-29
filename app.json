@@ -24,7 +24,14 @@
       "output": "single"
     },
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Used to scan a table-claim QR code someone hands you.",
+          "barcodeScannerEnabled": true
+        }
+      ]
     ]
   }
 }
