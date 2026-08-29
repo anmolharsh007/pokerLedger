@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import DoubleTapButton from './DoubleTapButton';
+import { displayName } from '../lib/displayName';
 import { PokerLedgerService, type CashInEntry, type CurrentGameInfo, type Player } from '../lib/pokerActions';
 
 type Props = {
@@ -17,11 +18,12 @@ type Props = {
   gameInfo: CurrentGameInfo | null;
   spreadsheetId: string;
   getAccessToken: () => Promise<string>;
+  useAlias: boolean;
   onBack: () => void;
   onChanged: () => void | Promise<void>;
 };
 
-export default function CashInScreen({ players, gameInfo, spreadsheetId, getAccessToken, onBack, onChanged }: Props) {
+export default function CashInScreen({ players, gameInfo, spreadsheetId, getAccessToken, useAlias, onBack, onChanged }: Props) {
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,7 +84,7 @@ export default function CashInScreen({ players, gameInfo, spreadsheetId, getAcce
           const warn = current.buyIns === 0 && delta > 0;
           return (
             <View key={p.row} style={styles.playerCard}>
-              <Text style={styles.playerName}>{p.name}</Text>
+              <Text style={styles.playerName}>{displayName(p, useAlias)}</Text>
 
               <View style={styles.fieldRow}>
                 <Text style={styles.fieldLabel}>Buy-ins</Text>
@@ -102,7 +104,7 @@ export default function CashInScreen({ players, gameInfo, spreadsheetId, getAcce
                 </View>
               </View>
 
-              {warn && <Text style={styles.warning}>This adds {p.name} to the current game.</Text>}
+              {warn && <Text style={styles.warning}>This adds {displayName(p, useAlias)} to the current game.</Text>}
             </View>
           );
         })

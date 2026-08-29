@@ -13,6 +13,7 @@
 import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { displayName } from '../lib/displayName';
 import { PokerLedgerService, type GroupInfo, type Player } from '../lib/pokerActions';
 
 type Props = {
@@ -22,6 +23,7 @@ type Props = {
   getAccessToken: () => Promise<string>;
   selectedPlayers: string[] | null;
   setSelectedPlayers: Dispatch<SetStateAction<string[] | null>>;
+  useAlias: boolean;
   onBack: () => void;
   onChanged: () => void | Promise<void>;
 };
@@ -34,11 +36,20 @@ export default function GroupScreen({
   spreadsheetId,
   getAccessToken,
   setSelectedPlayers,
+  useAlias,
   onBack,
   onChanged,
 }: Props) {
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
+
+  // group members are plain resolved name strings (listGroups reads back
+  // already-evaluated formula text) — look each up against the roster
+  // purely for display, never for the join itself.
+  const memberLabel = (name: string) => {
+    const p = players.find((pl) => pl.name === name);
+    return p ? displayName(p, useAlias) : name;
+  };
 
   // Radio behavior — only one group can be selected at a time.
   const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
@@ -156,7 +167,7 @@ export default function GroupScreen({
               delayLongPress={500}>
               <View style={styles.groupInfo}>
                 <Text style={styles.groupName}>{group.name}</Text>
-                <Text style={styles.groupMembers}>{group.members.join(', ') || 'No members'}</Text>
+                <Text style={styles.groupMembers}>{group.members.map(memberLabel).join(', ') || 'No members'}</Text>
               </View>
               <View style={[styles.addBtn, selected && styles.addBtnActive]}>
                 <Text style={styles.addBtnText}>+</Text>
@@ -194,7 +205,7 @@ export default function GroupScreen({
                     <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
                       {checked ? <Text style={styles.checkboxMark}>✓</Text> : null}
                     </View>
-                    <Text style={styles.checkboxLabel}>{p.name}</Text>
+                    <Text style={styles.checkboxLabel}>{displayName(p, useAlias)}</Text>
                   </Pressable>
                 );
               })}
@@ -221,7 +232,7 @@ export default function GroupScreen({
             ) : (
               infoGroup?.members.map((m) => (
                 <Text key={m} style={styles.modalLine}>
-                  {m}
+                  {memberLabel(m)}
                 </Text>
               ))
             )}
@@ -246,7 +257,7 @@ export default function GroupScreen({
                     <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
                       {checked ? <Text style={styles.checkboxMark}>✓</Text> : null}
                     </View>
-                    <Text style={styles.checkboxLabel}>{p.name}</Text>
+                    <Text style={styles.checkboxLabel}>{displayName(p, useAlias)}</Text>
                   </Pressable>
                 );
               })}

@@ -31,10 +31,12 @@ import CashOutScreen from './CashOutScreen';
 import DoubleTapButton from './DoubleTapButton';
 import GroupScreen from './GroupScreen';
 import TableScreen from './TableScreen';
+import { displayName } from '../lib/displayName';
 import { PokerLedgerService, type CurrentGameInfo, type GroupInfo, type Player, type TableInfoData } from '../lib/pokerActions';
 
 type Props = {
   spreadsheetId: string;
+  userId: string;
   getAccessToken: () => Promise<string>;
 };
 
@@ -49,7 +51,7 @@ function deriveGameState(tableInfo: TableInfoData | null): GameState {
 
 const notImplemented = (what: string) => Alert.alert(what, 'Coming in a later build round.');
 
-export default function TableHome({ spreadsheetId, getAccessToken }: Props) {
+export default function TableHome({ spreadsheetId, userId, getAccessToken }: Props) {
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
 
   const [tableInfo, setTableInfo] = useState<TableInfoData | null>(null);
@@ -229,7 +231,14 @@ export default function TableHome({ spreadsheetId, getAccessToken }: Props) {
         <Pressable style={styles.backLink} onPress={() => setShowManagePlayers(false)}>
           <Text style={styles.backLinkText}>‹ Table</Text>
         </Pressable>
-        <TableScreen spreadsheetId={spreadsheetId} getAccessToken={getAccessToken} players={players} onChanged={load} />
+        <TableScreen
+          spreadsheetId={spreadsheetId}
+          userId={userId}
+          getAccessToken={getAccessToken}
+          players={players}
+          tableInfo={tableInfo}
+          onChanged={load}
+        />
       </View>
     );
   }
@@ -243,6 +252,7 @@ export default function TableHome({ spreadsheetId, getAccessToken }: Props) {
         getAccessToken={getAccessToken}
         selectedPlayers={selectedPlayers}
         setSelectedPlayers={setSelectedPlayers}
+        useAlias={tableInfo?.useAlias ?? false}
         onBack={() => setShowGroupScreen(false)}
         onChanged={load}
       />
@@ -256,6 +266,7 @@ export default function TableHome({ spreadsheetId, getAccessToken }: Props) {
         gameInfo={gameInfo}
         spreadsheetId={spreadsheetId}
         getAccessToken={getAccessToken}
+        useAlias={tableInfo?.useAlias ?? false}
         onBack={() => setShowCashInScreen(false)}
         onChanged={load}
       />
@@ -268,6 +279,7 @@ export default function TableHome({ spreadsheetId, getAccessToken }: Props) {
         gameInfo={gameInfo}
         spreadsheetId={spreadsheetId}
         getAccessToken={getAccessToken}
+        useAlias={tableInfo?.useAlias ?? false}
         onBack={() => setShowCashOutScreen(false)}
         onChanged={load}
       />
@@ -317,7 +329,9 @@ export default function TableHome({ spreadsheetId, getAccessToken }: Props) {
       {playingPlayers.length > 0 && (
         <View style={styles.playingRow}>
           <Text style={styles.playingLabel}>Playing:</Text>
-          <Text style={styles.playingNames}>{playingPlayers.map((p) => p.name).join(', ')}</Text>
+          <Text style={styles.playingNames}>
+            {playingPlayers.map((p) => displayName(p, tableInfo?.useAlias ?? false)).join(', ')}
+          </Text>
         </View>
       )}
 
@@ -460,7 +474,7 @@ export default function TableHome({ spreadsheetId, getAccessToken }: Props) {
                 <Text style={styles.modalLine}>Buy-in (₹): {gameInfo.buyInAmount}</Text>
                 {playingPlayers.map((p) => (
                   <Text key={p.name} style={styles.modalLine}>
-                    {p.name} — {p.buyIns} buy-in(s), {p.finalChips} chips
+                    {displayName(p, tableInfo?.useAlias ?? false)} — {p.buyIns} buy-in(s), {p.finalChips} chips
                   </Text>
                 ))}
               </>
@@ -485,12 +499,14 @@ export default function TableHome({ spreadsheetId, getAccessToken }: Props) {
             ) : (
               (selectedPlayers ?? []).map((name) => {
                 const checked = popupChecked.has(name);
+                const player = players.find((p) => p.name === name);
+                const label = player ? displayName(player, tableInfo?.useAlias ?? false) : name;
                 return (
                   <Pressable key={name} style={styles.selectedCheckRow} onPress={() => togglePopupChecked(name)}>
                     <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
                       {checked ? <Text style={styles.checkboxMark}>✓</Text> : null}
                     </View>
-                    <Text style={styles.modalLine}>{name}</Text>
+                    <Text style={styles.modalLine}>{label}</Text>
                   </Pressable>
                 );
               })

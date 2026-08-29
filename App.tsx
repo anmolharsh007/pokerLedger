@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import PlayerAccountsScreen from './components/PlayerAccountsScreen';
 import TableHome from './components/TableHome';
 import { createAppSheet, listAppSheets } from './lib/appSheet';
 import { GoogleAuthProvider } from './lib/auth/googleAuthProvider';
@@ -27,6 +28,7 @@ export default function App() {
   const [showNewTableForm, setShowNewTableForm] = useState(false);
 
   const [selectedSpreadsheetId, setSelectedSpreadsheetId] = useState<string | null>(null);
+  const [showAccountsScreen, setShowAccountsScreen] = useState(false);
 
   // For every linked table, read back whatever `listColumns` the
   // project's seed defines (e.g. a status/total line under its name).
@@ -101,6 +103,7 @@ export default function App() {
     setTableSummaries({});
     setTablesError(null);
     setSelectedSpreadsheetId(null);
+    setShowAccountsScreen(false);
   };
 
   const handleCreateTable = async (name: string) => {
@@ -156,6 +159,15 @@ export default function App() {
     );
   }
 
+  if (showAccountsScreen) {
+    return (
+      <View style={styles.container}>
+        <PlayerAccountsScreen userId={user.id} getAccessToken={() => auth.getAccessToken()} onBack={() => setShowAccountsScreen(false)} />
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
+
   if (selectedSpreadsheetId) {
     return (
       <View style={styles.container}>
@@ -167,7 +179,7 @@ export default function App() {
             <Text style={styles.signOutText}>Sign out</Text>
           </Pressable>
         </View>
-        <TableHome spreadsheetId={selectedSpreadsheetId} getAccessToken={() => auth.getAccessToken()} />
+        <TableHome spreadsheetId={selectedSpreadsheetId} userId={user.id} getAccessToken={() => auth.getAccessToken()} />
         <StatusBar style="auto" />
       </View>
     );
@@ -177,9 +189,14 @@ export default function App() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{user.displayName || user.email || 'Poker Ledger'}</Text>
-        <Pressable onPress={handleSignOut}>
-          <Text style={styles.signOutText}>Sign out</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable onPress={() => setShowAccountsScreen(true)}>
+            <Text style={styles.accountsLinkText}>Player Accounts</Text>
+          </Pressable>
+          <Pressable onPress={handleSignOut}>
+            <Text style={styles.signOutText}>Sign out</Text>
+          </Pressable>
+        </View>
       </View>
 
       {tablesError ? (
@@ -299,6 +316,15 @@ const styles = StyleSheet.create({
     color: '#666',
     fontWeight: '600',
     fontSize: 15,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  accountsLinkText: {
+    color: '#2f95dc',
+    fontWeight: '600',
   },
   signOutText: {
     color: '#d33',

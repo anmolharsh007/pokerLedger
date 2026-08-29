@@ -10,17 +10,19 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import DoubleTapButton from './DoubleTapButton';
+import { displayName } from '../lib/displayName';
 import { PokerLedgerService, type CashInEntry, type CurrentGameInfo } from '../lib/pokerActions';
 
 type Props = {
   gameInfo: CurrentGameInfo | null;
   spreadsheetId: string;
   getAccessToken: () => Promise<string>;
+  useAlias: boolean;
   onBack: () => void;
   onChanged: () => void | Promise<void>;
 };
 
-export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken, onBack, onChanged }: Props) {
+export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken, useAlias, onBack, onChanged }: Props) {
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +69,7 @@ export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken,
       ) : (
         playingPlayers.map((p) => (
           <View key={p.name} style={styles.playerCard}>
-            <Text style={styles.playerName}>{p.name}</Text>
+            <Text style={styles.playerName}>{displayName(p, useAlias)}</Text>
             <TextInput
               style={styles.chipsInput}
               value={chipsInputs[p.name] ?? ''}
