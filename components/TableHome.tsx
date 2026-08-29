@@ -302,7 +302,13 @@ export default function TableHome({ spreadsheetId, getAccessToken, mock }: Props
           onPress={() => setShowManagePlayers(false)}>
           <Text style={styles.backLinkText}>‹ Table</Text>
         </Pressable>
-        <TableScreen spreadsheetId={spreadsheetId} getAccessToken={getAccessToken} players={players} onChanged={load} />
+        <TableScreen
+          spreadsheetId={spreadsheetId}
+          tableName={tableInfo?.title || 'Poker Table'}
+          getAccessToken={getAccessToken}
+          players={players}
+          onChanged={load}
+        />
       </View>
     );
   }

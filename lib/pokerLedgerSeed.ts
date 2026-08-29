@@ -28,7 +28,11 @@
  */
 import type { SheetSeed } from './appSheet';
 
-export const APP_NAME = 'poker-ledger';
+// The app's Drive folder name (lib/appSheet.ts#createAppSheet's
+// `appName`) — deliberately the real display name now, not a
+// kebab-case id: this is a top-level folder a user sees in their own
+// Drive, not an internal identifier, so it should read like one.
+export const APP_NAME = 'Poker Ledger';
 export const DEFAULT_SHEET_NAME = 'Poker Table';
 
 export const TABS = {
