@@ -1,15 +1,19 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import AllPlayersScreen from './components/AllPlayersScreen';
+import ScanClaimScreen from './components/ScanClaimScreen';
 import TableHome from './components/TableHome';
+import { addOwnSheet, ensureOwnAccount, getOrCreateAppFolderId, removeStaleSheets } from './lib/accountsApi';
 import { createAppSheet, listAppSheets } from './lib/appSheet';
 import { GoogleAuthProvider } from './lib/auth/googleAuthProvider';
 import type { AuthUser } from './lib/auth/types';
-import { batchGetValues } from './lib/googleSheetsApi';
+import { listPendingClaimsForHost, processClaim } from './lib/claimsApi';
+import { batchGetValues, getSpreadsheetMeta } from './lib/googleSheetsApi';
 import { PokerLedgerService } from './lib/pokerActions';
 import { APP_NAME, DEFAULT_SHEET_NAME, pokerLedgerSeed } from './lib/pokerLedgerSeed';
-import type { LinkedSheet } from './lib/sheetRegistry';
+import { removeLinkedSheet, type LinkedSheet } from './lib/sheetRegistry';
 
 const auth = new GoogleAuthProvider();
 
@@ -27,6 +31,16 @@ export default function App() {
   const [showNewTableForm, setShowNewTableForm] = useState(false);
 
   const [selectedSpreadsheetId, setSelectedSpreadsheetId] = useState<string | null>(null);
+  const [showAllPlayers, setShowAllPlayers] = useState(false);
+  const [showScanClaim, setShowScanClaim] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  // Alert.alert is a no-op on web (react-native-web has no real
+  // implementation) — these drive an actual Modal instead, which does
+  // work cross-platform (TableHome.tsx already relies on the same).
+  const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
+  const [claimProcessedMessage, setClaimProcessedMessage] = useState<string | null>(null);
+  const [staleToConfirm, setStaleToConfirm] = useState<LinkedSheet[] | null>(null);
+  const [removingStale, setRemovingStale] = useState(false);
 
   // For every linked table, read back whatever `listColumns` the
   // project's seed defines (e.g. a status/total line under its name).
@@ -48,13 +62,38 @@ export default function App() {
     setTableSummaries(Object.fromEntries(entries));
   }, []);
 
+  // Tables created on this device (local registry, lib/sheetRegistry.ts)
+  // merged with every table this account is a *player* in, wherever it
+  // was created (Firestore, lib/accountsApi.ts#ensureOwnAccount) — #6's
+  // whole point: b/c/f see table1/table2/table-yo without having
+  // created any of them themselves. Deduped by spreadsheetId, Firestore
+  // entries take priority — its `name` is always the human-typed table
+  // name (lib/accountsApi.ts#addOwnSheet), whereas the local registry
+  // historically stored the raw generated Drive filename instead (fixed
+  // going forward in lib/appSheet.ts, but this also self-heals any
+  // already-created tables still holding that stale name locally).
+  // Firestore is best-effort (ensureOwnAccount returns null if
+  // unconfigured or not signed into Firebase), so a local-only entry
+  // still shows up (just possibly under the old gibberish name) rather
+  // than disappearing outright.
   const loadTables = useCallback(async () => {
     setTablesError(null);
     try {
       const accessToken = await auth.getAccessToken();
-      const linked = await listAppSheets(user?.id ?? '');
-      setTables(linked);
-      await loadTableSummaries(linked, accessToken);
+      const localLinked = await listAppSheets(user?.id ?? '');
+      const byId = new Map<string, LinkedSheet>();
+      if (user?.email) {
+        const account = await ensureOwnAccount(user.email, user.displayName ?? null);
+        for (const sheet of account?.sheets ?? []) {
+          byId.set(sheet.spreadsheetId, { id: sheet.spreadsheetId, name: sheet.name, spreadsheetId: sheet.spreadsheetId });
+        }
+      }
+      for (const s of localLinked) {
+        if (!byId.has(s.spreadsheetId)) byId.set(s.spreadsheetId, s);
+      }
+      const merged = Array.from(byId.values());
+      setTables(merged);
+      await loadTableSummaries(merged, accessToken);
     } catch (err) {
       setTablesError(err instanceof Error ? err.message : String(err));
     }
@@ -70,6 +109,34 @@ export default function App() {
   useEffect(() => {
     if (user) loadTables();
   }, [user, loadTables]);
+
+  // Auto-processes any pending QR claims naming this account as the
+  // generator — see lib/claimsApi.ts's module comment for the full
+  // flow. Runs once per sign-in, not on every loadTables refresh
+  // (claims are rare; no need to re-check on every ⟳).
+  useEffect(() => {
+    if (!user?.email) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const pending = await listPendingClaimsForHost(user.email!);
+        if (pending.length === 0) return;
+        const accessToken = await auth.getAccessToken();
+        const lines: string[] = [];
+        for (const claim of pending) {
+          const results = await processClaim(claim, accessToken);
+          const ok = results.filter((r) => r.ok).length;
+          lines.push(`${claim.playerName} (${claim.claimedBy}): ${ok}/${results.length} tables linked`);
+        }
+        if (!cancelled) setClaimProcessedMessage(lines.join('\n'));
+      } catch {
+        // Best-effort — a failed check here doesn't block anything else; whoever scanned can just wait for the next app open.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.email]);
 
   const handleSignIn = async () => {
     setSigningIn(true);
@@ -109,19 +176,38 @@ export default function App() {
     setTablesError(null);
     try {
       const accessToken = await auth.getAccessToken();
+      // Cached (Firestore-backed) folder resolution — see
+      // lib/accountsApi.ts#getOrCreateAppFolderId and
+      // lib/googleDriveApi.ts#resolveAppFolder's own comments for why
+      // resolving this by name-search on every table creation isn't
+      // reliable (it's what caused the duplicate-folder issue).
+      const folderId = user.email
+        ? await getOrCreateAppFolderId(user.email, APP_NAME, accessToken)
+        : undefined;
       // The Drive file itself is named Table<ID>.xlsx — not the
-      // human-typed name, which lives in TableInfo!B1 instead (and in
-      // the local registry's `name`, used for the table list below).
+      // human-typed name, which lives in TableInfo!B1 instead. Passed
+      // through as displayName so the registry (and this screen's own
+      // table list) shows the typed name, not the generated file title.
       const tableId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       const { spreadsheetId } = await createAppSheet(user.id, accessToken, {
         appName: APP_NAME,
         sheetName: `Table${tableId}.xlsx`,
+        displayName: name,
+        folderId,
         seed: pokerLedgerSeed,
       });
       // The seed only writes the "title" label into TableInfo!A1, not
       // the actual name into B1 — that has to happen here, once we
       // know the real spreadsheetId.
-      await new PokerLedgerService(spreadsheetId).setTableTitle(name, accessToken);
+      const service = new PokerLedgerService(spreadsheetId);
+      await service.setTableTitle(name, accessToken);
+      // The creator is always a member of their own table — not just
+      // its owner. No grantPermission needed here (they already own
+      // the file outright) or inviteToAccount (addOwnSheet below is
+      // that exact same Firestore write, for themselves).
+      await service.addPlayer(user.displayName || user.email || 'Me', user.email ?? '', accessToken);
+      // Best-effort discovery-index write — see loadTables' comment.
+      if (user.email) await addOwnSheet(user.email, { spreadsheetId, name });
       setShowNewTableForm(false);
       setNewTableName('');
       await loadTables();
@@ -130,6 +216,68 @@ export default function App() {
       setTablesError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreatingTable(false);
+    }
+  };
+
+  // Long-press on the table list's ⟳ (see the header below) — a real
+  // Drive round-trip per table, so deliberately opt-in rather than run
+  // on every normal load. Checks the actual on-screen (merged local +
+  // Firestore) list, not just Firestore's own `sheets` — a table that
+  // was never in Firestore at all (only ever local) still needs to be
+  // caught here, or it'd keep showing up forever. Reports stale entries
+  // and asks before removing anything; never deletes silently.
+  const handleVerifySheets = async () => {
+    if (!user) return;
+    setVerifying(true);
+    try {
+      const accessToken = await auth.getAccessToken();
+      const current = tables ?? [];
+      const stale: LinkedSheet[] = [];
+      await Promise.all(
+        current.map(async (t) => {
+          try {
+            await getSpreadsheetMeta(t.spreadsheetId, accessToken);
+          } catch {
+            stale.push(t);
+          }
+        })
+      );
+      if (stale.length === 0) {
+        setVerifyMessage('Every table in your list is still reachable.');
+      } else {
+        setStaleToConfirm(stale);
+      }
+    } catch (err) {
+      setTablesError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleConfirmRemoveStale = async () => {
+    if (!user || !staleToConfirm) return;
+    setRemovingStale(true);
+    try {
+      if (user.email) {
+        await removeStaleSheets(
+          user.email,
+          staleToConfirm.map((s) => s.spreadsheetId)
+        );
+      }
+      // Local registry cleanup — removeStaleSheets only touches
+      // Firestore; a table that was never in Firestore at all (only
+      // ever local) would otherwise keep resurfacing via loadTables'
+      // local-fallback merge. removeLinkedSheet is a safe no-op for an
+      // id it doesn't have (e.g. a Firestore-only entry).
+      for (const entry of staleToConfirm) {
+        await removeLinkedSheet(user.id, entry.id);
+      }
+      setStaleToConfirm(null);
+      await loadTables();
+    } catch (err) {
+      setTablesError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRemovingStale(false);
     }
   };
 
@@ -173,13 +321,47 @@ export default function App() {
     );
   }
 
+  if (showAllPlayers) {
+    return (
+      <View style={styles.container}>
+        <AllPlayersScreen
+          tables={tables ?? []}
+          getAccessToken={() => auth.getAccessToken()}
+          hostEmail={user.email ?? ''}
+          onBack={() => setShowAllPlayers(false)}
+        />
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
+
+  if (showScanClaim) {
+    return (
+      <View style={styles.container}>
+        <ScanClaimScreen onBack={() => setShowScanClaim(false)} />
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>{user.displayName || user.email || 'Poker Ledger'}</Text>
-        <Pressable onPress={handleSignOut}>
-          <Text style={styles.signOutText}>Sign out</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable onPress={() => setShowScanClaim(true)}>
+            <Text style={styles.headerLinkText}>Scan</Text>
+          </Pressable>
+          <Pressable onPress={() => setShowAllPlayers(true)}>
+            <Text style={styles.headerLinkText}>Players</Text>
+          </Pressable>
+          <Pressable style={styles.refreshBtn} onPress={loadTables} onLongPress={handleVerifySheets} delayLongPress={500}>
+            {verifying ? <ActivityIndicator size="small" color="#2f95dc" /> : <Text style={styles.refreshBtnText}>⟳</Text>}
+          </Pressable>
+          <Pressable onPress={handleSignOut}>
+            <Text style={styles.signOutText}>Sign out</Text>
+          </Pressable>
+        </View>
       </View>
 
       {tablesError ? (
@@ -237,6 +419,56 @@ export default function App() {
         </ScrollView>
       )}
 
+      <Modal visible={verifyMessage !== null} transparent animationType="fade" onRequestClose={() => setVerifyMessage(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setVerifyMessage(null)}>
+          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Verified</Text>
+            <Text style={styles.modalLine}>{verifyMessage}</Text>
+            <Pressable style={styles.primaryBtn} onPress={() => setVerifyMessage(null)}>
+              <Text style={styles.primaryBtnText}>OK</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={claimProcessedMessage !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setClaimProcessedMessage(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setClaimProcessedMessage(null)}>
+          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Claim{claimProcessedMessage?.includes('\n') ? 's' : ''} processed</Text>
+            <Text style={styles.modalLine}>{claimProcessedMessage}</Text>
+            <Pressable style={styles.primaryBtn} onPress={() => setClaimProcessedMessage(null)}>
+              <Text style={styles.primaryBtnText}>OK</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={staleToConfirm !== null} transparent animationType="fade" onRequestClose={() => setStaleToConfirm(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setStaleToConfirm(null)}>
+          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Some tables are stale</Text>
+            <Text style={styles.modalLine}>These no longer exist or aren't reachable:</Text>
+            {(staleToConfirm ?? []).map((s) => (
+              <Text key={s.spreadsheetId} style={styles.modalLine}>
+                • {s.name || s.spreadsheetId}
+              </Text>
+            ))}
+            <View style={styles.newTableActions}>
+              <Pressable style={styles.secondaryBtn} disabled={removingStale} onPress={() => setStaleToConfirm(null)}>
+                <Text style={styles.secondaryBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={styles.primaryBtn} disabled={removingStale} onPress={handleConfirmRemoveStale}>
+                {removingStale ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Remove</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
       <StatusBar style="auto" />
     </View>
   );
@@ -263,6 +495,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  headerLinkText: { color: '#2f95dc', fontWeight: '600', fontSize: 14 },
+  refreshBtn: { paddingVertical: 4, paddingHorizontal: 4 },
+  refreshBtnText: { color: '#2f95dc', fontWeight: '700', fontSize: 18 },
   title: {
     fontSize: 20,
     fontWeight: '700',
@@ -321,6 +557,10 @@ const styles = StyleSheet.create({
   tableSummary: { fontSize: 13, opacity: 0.6 },
   newTableForm: { gap: 10 },
   newTableActions: { flexDirection: 'row', gap: 10 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  modalCard: { backgroundColor: '#fff', borderRadius: 12, padding: 20, width: '85%', gap: 10 },
+  modalTitle: { fontSize: 17, fontWeight: '700' },
+  modalLine: { fontSize: 14 },
   input: {
     fontSize: 16,
     paddingVertical: 10,

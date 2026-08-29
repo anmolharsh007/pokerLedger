@@ -16,7 +16,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
+import { GoogleAuthProvider as FirebaseGoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 
+import { getFirebaseAuth, isFirebaseConfigured } from '../firebase';
 import type { AuthUser } from './types';
 
 // Required so the browser tab/sheet closes itself and resolves
@@ -51,6 +53,25 @@ type StoredSession = {
   expiresAt: number; // epoch ms
   user: AuthUser;
 };
+
+/**
+ * Exchanges this Google sign-in's id_token for a Firebase Auth session,
+ * so Firestore rules (firestore.rules) can key off request.auth —
+ * lib/accountsApi.ts's reads/writes need this to have happened first.
+ * Best-effort: Firebase's own persistence (lib/firebase.ts) means this
+ * only needs to run once per Google sign-in, not on every access-token
+ * refresh; a failure here shouldn't block the rest of the app (Sheets
+ * access doesn't depend on it), so it's logged, not thrown.
+ */
+async function signIntoFirebase(idToken: string | undefined): Promise<void> {
+  if (!idToken || !isFirebaseConfigured()) return;
+  try {
+    const credential = FirebaseGoogleAuthProvider.credential(idToken);
+    await signInWithCredential(getFirebaseAuth(), credential);
+  } catch (err) {
+    console.warn('Firebase sign-in failed (cross-table discovery will be unavailable this session):', err);
+  }
+}
 
 /** Google issues separate OAuth client IDs per app type (Web/iOS/Android). */
 function getClientId(): string {
@@ -170,12 +191,22 @@ export class GoogleAuthProvider {
       user,
     };
     await saveSession(session);
+    // Best-effort, doesn't block the caller — see signIntoFirebase's own
+    // comment for why a failure here isn't fatal to the rest of sign-in.
+    await signIntoFirebase(tokenResponse.idToken);
     return user;
   }
 
   async signOut(): Promise<void> {
     const session = await loadSession();
     await saveSession(null);
+    if (isFirebaseConfigured()) {
+      try {
+        await getFirebaseAuth().signOut();
+      } catch {
+        // Best-effort.
+      }
+    }
     if (session?.accessToken) {
       try {
         await AuthSession.revokeAsync({ token: session.accessToken }, DISCOVERY);
