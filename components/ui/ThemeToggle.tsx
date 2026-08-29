@@ -1,8 +1,11 @@
 /**
  * The design feature-flag switch — lets the two decorative themes
  * (theme/tokens.ts) be compared live instead of picking one at build
- * time. A two-segment pill; the active segment is filled with that
- * theme's own accent so the control previews the swap before you tap it.
+ * time. A two-segment pill, icon-only — ○ for the light theme (Warm
+ * Orange), ● for the dark one (Felt & Gold), read off each theme's own
+ * `isDark` flag rather than hardcoding which name is which. The active
+ * segment fills with that theme's own accent so the control previews
+ * the swap before you tap it.
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -24,17 +27,14 @@ export default function ThemeToggle() {
           <Pressable
             key={name}
             onPress={() => setThemeName(name)}
+            accessibilityLabel={optionTheme.label}
             style={[
               styles.segment,
               { borderRadius: theme.radius.pill },
               active && { backgroundColor: optionTheme.colors.accent },
             ]}>
-            <Text
-              style={[
-                styles.label,
-                { color: active ? optionTheme.colors.accentText : theme.colors.textSecondary, fontWeight: theme.font.weight.bold },
-              ]}>
-              {optionTheme.label}
+            <Text style={[styles.icon, { color: active ? optionTheme.colors.accentText : theme.colors.textSecondary }]}>
+              {optionTheme.isDark ? '●' : '○'}
             </Text>
           </Pressable>
         );
@@ -45,6 +45,6 @@ export default function ThemeToggle() {
 
 const styles = StyleSheet.create({
   track: { flexDirection: 'row', padding: 3, gap: 3 },
-  segment: { paddingVertical: 6, paddingHorizontal: 10 },
-  label: { fontSize: 12 },
+  segment: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
+  icon: { fontSize: 14 },
 });
