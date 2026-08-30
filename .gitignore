@@ -34,13 +34,6 @@ yarn-error.*
 .env
 .env*.local
 
-# Firebase native app configs — not secret (per Firebase's own docs,
-# access is governed by firestore.rules, not by hiding these), but kept
-# out of the repo the same way .env is: provision your own per
-# lib/auth/googleAuthProvider.ts's module comment rather than reusing
-# committed ones.
-/google-services.json
-/GoogleService-Info.plist
 
 # typescript
 *.tsbuildinfo
