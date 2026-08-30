@@ -5,23 +5,52 @@
  * second tap), the second tap within ARM_TIMEOUT_MS runs the action.
  * Arming expires on its own if nothing follows.
  *
- * While armed, a soft white overlay breathes in and out on a loop —
- * without it, the only cue that a second tap is needed is the label
- * text changing, easy to miss on a quick double-tap flow.
+ * Transparent, border only like every other button — but with a double
+ * *dashed* border (an outer ring, a small gap, then an inner ring
+ * around the label) instead of a single solid one, so a "this needs two
+ * taps" button reads as visually distinct from a regular one-tap button
+ * at a glance, not just via its label text. The outer ring is drawn
+ * slightly thinner and at reduced opacity — a quieter frame around the
+ * inner ring, which carries the real color/weight.
  *
- * Its metallic fill (see GradientSurface) paints as an absolute-fill
- * layer behind the label — Pressable itself keeps owning all real
- * sizing, so the size-tiered grid buttons in TableHome can still just
- * pass a plain combined `style` (width + padding/minHeight/radius).
+ * The outer ring is a separate absolutely-positioned layer, not the
+ * Pressable's own border — that's what lets it fade independently of
+ * the Pressable's own disabled/pressed opacity (which would otherwise
+ * also dim the inner ring and label). The inner ring's inset from the
+ * true outer edge is set as its own `margin` (`OUTER_BORDER_WIDTH +
+ * RING_GAP`), not padding on the outer Pressable — a caller sizing the
+ * whole button down (TableHome's End button, via `style`) sets padding/
+ * minHeight on the OUTER box only; it can't also stack with (and
+ * inflate) the inset that's supposed to just separate the two rings.
+ * Matching that same total in the inner ring's radius (`radius -
+ * OUTER_BORDER_WIDTH - RING_GAP`) is what keeps the two rings genuinely
+ * concentric (an equal gap all the way around, corners included)
+ * instead of just parallel-looking on the straight edges. Get either
+ * constant out of sync with the other and the corners are the first
+ * place it shows.
+ *
+ * `radius` (defaults to theme.radius.md) sizes both rings — a caller
+ * that also overrides `borderRadius` via `style` (e.g. TableHome's End
+ * button, sized down to match Leaderboard) must pass the same value
+ * here too, or the inner ring's radius (computed from this prop) drifts
+ * out of sync with the outer ring's (the actually-rendered one, since
+ * `style` is applied last) and the double border stops looking concentric.
+ *
+ * While armed, a soft tinted wash breathes in and out on the inner ring
+ * — without it, the only cue that a second tap is needed is the label
+ * text changing, easy to miss on a quick double-tap flow.
  */
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import GradientSurface from './ui/GradientSurface';
 import { useTheme } from '../theme/ThemeProvider';
 
 const ARM_TIMEOUT_MS = 2500;
 const PULSE_MS = 480;
+const OUTER_BORDER_WIDTH = 1;
+const OUTER_BORDER_OPACITY = 0.55;
+const RING_GAP = 2;
+const INNER_INSET = OUTER_BORDER_WIDTH + RING_GAP;
 
 type Variant = 'primary' | 'danger';
 
@@ -32,10 +61,12 @@ type Props = {
   disabled?: boolean;
   variant?: Variant;
   style?: StyleProp<ViewStyle>;
+  radius?: number; // see module comment — must match any borderRadius override in `style`
 };
 
-export default function DoubleTapButton({ label, armedLabel, onConfirm, disabled, variant = 'primary', style }: Props) {
-  const { colors, radius, font, gradients } = useTheme();
+export default function DoubleTapButton({ label, armedLabel, onConfirm, disabled, variant = 'primary', style, radius: radiusProp }: Props) {
+  const { colors, radius: themeRadius, font } = useTheme();
+  const radius = radiusProp ?? themeRadius.md;
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,54 +107,61 @@ export default function DoubleTapButton({ label, armedLabel, onConfirm, disabled
     }
   };
 
-  // Danger's red reads better with a plain white label in both themes —
-  // colors.textInverse is tuned for sitting on `accent` (gold or orange),
-  // not on `danger`, and would be low-contrast against it in the felt theme.
-  const gradientColors = variant === 'danger' ? gradients.danger : gradients.accent;
-  const fgColor = variant === 'danger' ? '#fff' : colors.accentText;
+  const color = disabled ? colors.border : variant === 'danger' ? colors.danger : colors.accent;
+  const fgColor = disabled ? colors.textSecondary : color;
 
   return (
     <Pressable
-      style={({ pressed }) => [
-        styles.btn,
-        {
-          backgroundColor: disabled ? colors.surfaceAlt : undefined,
-          borderRadius: radius.md,
-          opacity: disabled ? 1 : pressed ? 0.88 : 1,
-        },
-        style,
-      ]}
+      style={({ pressed }) => [styles.outer, { opacity: disabled ? 0.5 : pressed ? 0.6 : 1 }, style]}
       disabled={disabled || busy}
       onPress={handlePress}>
-      {!disabled && <GradientSurface colors={gradientColors} style={[StyleSheet.absoluteFill, { borderRadius: radius.md }]} />}
-      {armed && (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            { borderRadius: radius.md, backgroundColor: '#fff', opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0, 0.3] }) },
-          ]}
-        />
-      )}
-      {busy ? (
-        <ActivityIndicator color={fgColor} />
-      ) : (
-        <Text style={[styles.text, { color: disabled ? colors.textSecondary : fgColor, fontSize: font.size.md, fontFamily: font.family.bold, fontWeight: font.weight.bold }]}>
-          {armed ? (armedLabel ?? 'Tap again to confirm') : label}
-        </Text>
-      )}
+      {/* The outer ring — its own faded opacity, independent of the
+          Pressable's own disabled/pressed opacity above (which would
+          otherwise dim the inner ring and label too). */}
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { borderRadius: radius, borderWidth: OUTER_BORDER_WIDTH, borderColor: color, borderStyle: 'dashed', opacity: OUTER_BORDER_OPACITY },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.inner,
+          {
+            margin: INNER_INSET,
+            borderRadius: Math.max(0, radius - INNER_INSET),
+            borderColor: color,
+            backgroundColor: pulse.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['transparent', variant === 'danger' ? `${colors.danger}22` : colors.accentSoft],
+            }),
+          },
+        ]}>
+        {busy ? (
+          <ActivityIndicator color={fgColor} />
+        ) : (
+          <Text style={[styles.text, { color: fgColor, fontSize: font.size.md, fontFamily: font.family.bold, fontWeight: font.weight.bold }]}>
+            {armed ? (armedLabel ?? 'Tap again to confirm') : label}
+          </Text>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  btn: {
-    paddingVertical: 14,
-    paddingHorizontal: 12,
+  outer: {
+    minHeight: 48,
+  },
+  inner: {
+    flex: 1,
+    borderWidth: 1,
+    borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48,
-    overflow: 'hidden',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
   },
   text: { textAlign: 'center' },
 });

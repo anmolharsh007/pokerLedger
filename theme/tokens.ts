@@ -61,7 +61,10 @@ export type Theme = {
     // system fonts, so `fontWeight` alone doesn't do anything once a
     // custom `fontFamily` is set. Every Text style pairs `weight.X` with
     // `family.X` for that reason (see App.tsx's useFonts call, which
-    // loads exactly these three).
+    // loads exactly these three). Cormorant Garamond throughout, not
+    // just the "Poker Ledger" wordmark — settled via the font-comparison
+    // review (font.brand's separate wordmark-only token is gone; there's
+    // nothing left for it to be separate from).
     family: { regular: string; medium: string; bold: string };
   };
   cardShadow: ViewStyle;

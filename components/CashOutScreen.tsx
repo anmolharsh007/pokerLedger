@@ -10,7 +10,7 @@
  * chips set directly) — no new service method needed.
  */
 import { useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import Button from './ui/Button';
 import Card from './ui/Card';
@@ -40,6 +40,18 @@ export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken,
   const styles = useMemo(() => createStyles(theme), [theme]);
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
+
+  // Explicit pixel width, not a `width: '47%'` — that percentage
+  // resolves against the wrapping Pressable below, which has no
+  // explicit width of its own (content-sized). Confirmed live on the
+  // home screen's identical table-card grid: Android's Yoga resolves it
+  // by walking up to a definite-width ancestor, iOS's doesn't — same
+  // bug here (this screen's cards render fine on Android, but collapse
+  // to a single narrow column on iOS without this fix).
+  const { width: windowWidth } = useWindowDimensions();
+  const PLAYER_GRID_PADDING = 20; // matches styles.content's own padding
+  const PLAYER_GRID_GAP = 10; // matches styles.playerGrid's own gap
+  const playerCardWidth = (windowWidth - PLAYER_GRID_PADDING * 2 - PLAYER_GRID_GAP) / 2;
 
   // Local, staged — nothing is written until Cash out.
   const [chipsInputs, setChipsInputs] = useState<Record<string, string>>({});
@@ -121,8 +133,13 @@ export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken,
             const value = chipsInputs[p.name] ?? '';
             const filled = value.trim() !== '';
             return (
-              <Pressable key={p.name} onPress={() => handleCardPress(p.name)}>
-                <Card portrait highlighted={filled} style={styles.playerCard}>
+              <View key={p.name} style={{ width: playerCardWidth }}>
+              <Pressable onPress={() => handleCardPress(p.name)}>
+                <Card
+                  portrait
+                  highlighted={filled}
+                  borderColor={filled ? undefined : theme.colors.border}
+                  style={[styles.playerCard, !filled && styles.playerCardDashed]}>
                   {filled && (
                     <Pressable style={styles.deleteBtn} onPress={() => handleClearChips(p.name)}>
                       <Text style={styles.deleteBtnText}>✕</Text>
@@ -131,20 +148,24 @@ export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken,
                   <Text style={styles.playerName} numberOfLines={1}>
                     {displayName(p, useAlias)}
                   </Text>
-                  {filled ? (
+                  {filled && (
                     <View style={styles.chipsSet}>
                       <ChipStackIcon size={16} />
                       <Text style={styles.chipsSetValue}>{value}</Text>
                     </View>
-                  ) : (
-                    <Text style={styles.tapHint}>Double-tap to enter</Text>
                   )}
                   <View style={styles.untilNowBox}>
                     <Text style={styles.untilNowLabel}>Until now</Text>
                     <Text style={styles.untilNowValue}>{p.finalChips || 0}</Text>
                   </View>
+                  {/* Pinned to the card's bottom edge, centered — not
+                      stacked in with the rest of the centered content
+                      above, so it reads as a hint about the whole card
+                      rather than just another line in the stack. */}
+                  {!filled && <Text style={styles.tapHint}>Double-tap to enter</Text>}
                 </Card>
               </Pressable>
+              </View>
             );
           })}
         </View>
@@ -181,8 +202,19 @@ const createStyles = (theme: Theme) =>
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     sectionTitle: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary },
     empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
-    playerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-    playerCard: { width: '47%' },
+    playerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, rowGap: 14 },
+    // Actual width comes from the wrapping View's explicit pixel width
+    // (playerCardWidth) — see that computation's own comment for why.
+    // aspectRatio less tall than Card's own portrait default (0.74) —
+    // three stacked lines (name, chips/hint, "Until now") felt cramped
+    // at that ratio; paddingHorizontal claims back some of the width
+    // Card's own padding (16, all sides by default) left for them.
+    playerCard: { width: '100%', aspectRatio: 0.92, paddingHorizontal: theme.spacing(3) },
+    // Empty (no final chips staged) cards get a dashed grey border
+    // instead of Card's own solid beveled default — same "nothing here
+    // yet" language Cash-in's cards use; a solid accent border (once
+    // highlighted) reads as filled in.
+    playerCardDashed: { borderStyle: 'dashed' },
     // Clears a filled card's staged value — top-right, only shown once
     // there's something to delete.
     deleteBtn: {
@@ -192,16 +224,32 @@ const createStyles = (theme: Theme) =>
       width: 22,
       height: 22,
       borderRadius: 11,
-      backgroundColor: theme.colors.danger,
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      borderColor: theme.colors.danger,
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 2,
     },
-    deleteBtnText: { color: '#fff', fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: 12 },
-    playerName: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
-    tapHint: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, fontStyle: 'italic' },
+    deleteBtnText: { color: theme.colors.danger, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: 12 },
+    // All card text sized up 30% (same bump app-wide).
+    playerName: { fontSize: theme.font.size.md * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    // Pinned to the card's bottom edge, centered — see the render
+    // site's own comment for why it's not just stacked in like the
+    // other centered content.
+    tapHint: {
+      position: 'absolute',
+      bottom: 10,
+      left: 0,
+      right: 0,
+      textAlign: 'center',
+      fontSize: theme.font.size.xs * 1.3,
+      fontFamily: theme.font.family.regular,
+      color: theme.colors.textSecondary,
+      fontStyle: 'italic',
+    },
     chipsSet: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    chipsSetValue: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.accent },
+    chipsSetValue: { fontSize: theme.font.size.lg * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.accent },
     untilNowBox: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -209,11 +257,14 @@ const createStyles = (theme: Theme) =>
       gap: 6,
       paddingVertical: 4,
       paddingHorizontal: 10,
-      backgroundColor: theme.colors.surfaceAlt,
+      // No background — border-only/transparent like everything else.
       borderRadius: theme.radius.sm,
     },
-    untilNowLabel: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary },
-    untilNowValue: { fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, color: theme.colors.textPrimary },
+    untilNowLabel: { fontSize: theme.font.size.xs * 1.3, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary },
+    // Had no explicit fontSize (RN's plain default, 14) — pinned to
+    // theme.font.size.sm now so the 30% card-text bump has a real base
+    // to scale from, instead of scaling an implicit default.
+    untilNowValue: { fontSize: theme.font.size.sm * 1.3, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, color: theme.colors.textPrimary },
     modalIconRow: { alignItems: 'center' },
     modalTitle: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
     modalInput: { textAlign: 'center' },

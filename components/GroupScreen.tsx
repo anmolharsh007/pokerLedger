@@ -6,18 +6,19 @@
  *    actual commit happens back on the Table screen when `start` is
  *    double-tapped.
  *  - long press: view-only info popup (name + members).
- *  - double tap: edit popup (title + checkbox list to add/remove
- *    members) — the one other real write here besides "+ New Group",
- *    via lib/pokerActions.ts#updateGroup.
+ *  - double tap: edit popup (title + a 2-column grid of member-toggle
+ *    tiles to add/remove members — see components/ui/SelectTile.tsx)
+ *    — the one other real write here besides "+ New Group", via
+ *    lib/pokerActions.ts#updateGroup.
  */
 import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import Button from './ui/Button';
 import CardButton from './ui/CardButton';
-import Checkbox from './ui/Checkbox';
 import IconButton from './ui/IconButton';
 import ModalCard from './ui/ModalCard';
+import SelectTile from './ui/SelectTile';
 import TextField from './ui/TextField';
 import { displayName } from '../lib/displayName';
 import { PokerLedgerService, type GroupInfo, type Player } from '../lib/pokerActions';
@@ -56,6 +57,16 @@ export default function GroupScreen({
   const styles = useMemo(() => createStyles(theme), [theme]);
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
   const [error, setError] = useState<string | null>(null);
+
+  // Explicit pixel width, not a `width: '47%'` — that percentage
+  // resolves against CardButton's own Pressable, which has no explicit
+  // width of its own (content-sized). Confirmed live on App.tsx's own
+  // identical table-card grid: Android's Yoga resolves it by walking up
+  // to a definite-width ancestor, iOS's doesn't — same bug here.
+  const { width: windowWidth } = useWindowDimensions();
+  const GROUP_GRID_PADDING = 20; // matches styles.content's own padding
+  const GROUP_GRID_GAP = 12; // matches styles.groupGrid's own gap
+  const groupCardWidth = (windowWidth - GROUP_GRID_PADDING * 2 - GROUP_GRID_GAP) / 2;
 
   // group members are plain resolved name strings (listGroups reads back
   // already-evaluated formula text) — look each up against the roster
@@ -172,28 +183,29 @@ export default function GroupScreen({
           {groups.map((group, i) => {
             const selected = selectedGroupName === group.name;
             return (
-              <CardButton
-                key={group.name}
-                selected={selected}
-                onPress={() => handleGroupPress(group)}
-                onLongPress={() => setInfoGroup(group)}
-                delayLongPress={500}
-                // Per-card colors turned off for now — may want them
-                // back later, see theme/cardTints.ts.
-                // tint={cardTintFor(i)}
-                badge="GROUP"
-                style={styles.groupCard}>
-                <Text style={styles.groupCardName} numberOfLines={1}>
-                  {selected ? '✓ ' : ''}
-                  {group.name}
-                </Text>
-                <Text style={styles.groupCardCount}>
-                  {group.members.length} member{group.members.length === 1 ? '' : 's'}
-                </Text>
-                <Text style={styles.groupCardMembers} numberOfLines={2}>
-                  {group.members.map(memberLabel).join(', ') || 'No members'}
-                </Text>
-              </CardButton>
+              <View key={group.name} style={{ width: groupCardWidth }}>
+                <CardButton
+                  selected={selected}
+                  onPress={() => handleGroupPress(group)}
+                  onLongPress={() => setInfoGroup(group)}
+                  delayLongPress={500}
+                  // Per-card colors turned off for now — may want them
+                  // back later, see theme/cardTints.ts.
+                  // tint={cardTintFor(i)}
+                  badge="GROUP"
+                  style={styles.groupCard}>
+                  <Text style={styles.groupCardName} numberOfLines={1}>
+                    {selected ? '✓ ' : ''}
+                    {group.name}
+                  </Text>
+                  <Text style={styles.groupCardCount}>
+                    {group.members.length} member{group.members.length === 1 ? '' : 's'}
+                  </Text>
+                  <Text style={styles.groupCardMembers} numberOfLines={2}>
+                    {group.members.map(memberLabel).join(', ') || 'No members'}
+                  </Text>
+                </CardButton>
+              </View>
             );
           })}
         </View>
@@ -208,9 +220,11 @@ export default function GroupScreen({
         <Text style={styles.modalTitle}>New Group</Text>
         <TextField value={newGroupTitle} onChangeText={setNewGroupTitle} placeholder="Group title" autoFocus />
         <ScrollView style={styles.checkboxList}>
-          {players.map((p) => (
-            <Checkbox key={p.row} checked={checkedPlayers.has(p.name)} onPress={() => toggleChecked(p.name)} label={displayName(p, useAlias)} />
-          ))}
+          <View style={styles.checkboxGrid}>
+            {players.map((p) => (
+              <SelectTile key={p.row} selected={checkedPlayers.has(p.name)} onPress={() => toggleChecked(p.name)} label={displayName(p, useAlias)} />
+            ))}
+          </View>
         </ScrollView>
         <View style={styles.modalActions}>
           <Button
@@ -243,9 +257,11 @@ export default function GroupScreen({
         <Text style={styles.modalTitle}>Edit Group</Text>
         <TextField value={editTitle} onChangeText={setEditTitle} placeholder="Group title" />
         <ScrollView style={styles.checkboxList}>
-          {players.map((p) => (
-            <Checkbox key={p.row} checked={editChecked.has(p.name)} onPress={() => toggleEditChecked(p.name)} label={displayName(p, useAlias)} />
-          ))}
+          <View style={styles.checkboxGrid}>
+            {players.map((p) => (
+              <SelectTile key={p.row} selected={editChecked.has(p.name)} onPress={() => toggleEditChecked(p.name)} label={displayName(p, useAlias)} />
+            ))}
+          </View>
         </ScrollView>
         <View style={styles.modalActions}>
           <Button label={saving ? 'Saving…' : 'Save'} disabled={saving || !editTitle.trim()} onPress={handleSaveEdit} style={styles.flexBtn} />
@@ -267,15 +283,20 @@ const createStyles = (theme: Theme) =>
     // Variant C's badge chip straddles a card's bottom edge — extra
     // row spacing so it doesn't run into the next row's cards.
     gridRowGapForBadges: { rowGap: 24 },
-    groupCard: { width: '47%' },
+    // Actual width comes from the wrapping View's explicit pixel width
+    // (groupCardWidth) — see that computation's own comment for why.
+    groupCard: { width: '100%' },
     // Name at top, member count in the middle, a few names below —
     // one centered block rather than an icon-led layout.
-    groupCardName: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
-    groupCardCount: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.accent, textAlign: 'center' },
-    groupCardMembers: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
+    // All three sized up 30% (same bump applied to every card's text
+    // app-wide: table cards, Cash-in/Cash-out cards, player rows).
+    groupCardName: { fontSize: theme.font.size.md * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    groupCardCount: { fontSize: theme.font.size.sm * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.accent, textAlign: 'center' },
+    groupCardMembers: { fontSize: theme.font.size.xs * 1.3, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
     modalTitle: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
     modalLine: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, color: theme.colors.textPrimary },
-    checkboxList: { maxHeight: 220 },
+    checkboxList: { maxHeight: 260 },
+    checkboxGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 4 },
     modalActions: { flexDirection: 'row', gap: 10 },
     flexBtn: { flex: 1 },
   });
