@@ -92,5 +92,9 @@ export default function Card({ children, style, raised, portrait, borderColor, b
 const badgeStyles = StyleSheet.create({
   wrap: { position: 'absolute', bottom: -11, left: 0, right: 0, alignItems: 'center' },
   chip: { paddingVertical: 4, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1 },
-  text: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  // No fontWeight here — this pairs with a custom fontFamily (bold
+  // Cormorant Garamond) at the render site, and combining that with an
+  // actual bold fontWeight is exactly what breaks custom fonts on
+  // Android (see theme/tokens.ts's `weight` for the full explanation).
+  text: { fontSize: 10, letterSpacing: 0.5 },
 });
