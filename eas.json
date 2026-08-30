@@ -2,8 +2,31 @@
   "cli": { "appVersionSource": "remote" },
   "build": {
     "development": { "developmentClient": true, "distribution": "internal" },
-    "preview": { "distribution": "internal", "android": { "buildType": "apk" } },
-    "production": { "autoIncrement": true }
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "339157808585-0pkrghf704tdr4d56olqdeocse8v9ldi.apps.googleusercontent.com",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyChOiXyDLrBvRaDATacy8NQKAq5lBVsvNM",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "poker-ledger-qzw2dd.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "poker-ledger-qzw2dd",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "poker-ledger-qzw2dd.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "339157808585",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:339157808585:web:004a7eb1d60ad411fce418"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "339157808585-0pkrghf704tdr4d56olqdeocse8v9ldi.apps.googleusercontent.com",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyChOiXyDLrBvRaDATacy8NQKAq5lBVsvNM",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "poker-ledger-qzw2dd.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "poker-ledger-qzw2dd",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "poker-ledger-qzw2dd.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "339157808585",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:339157808585:web:004a7eb1d60ad411fce418"
+      }
+    }
   },
   "submit": { "production": {} }
 }
