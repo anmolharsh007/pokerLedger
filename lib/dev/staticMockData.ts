@@ -40,7 +40,8 @@ const groups: GroupInfo[] = [
 
 const mockByTable: Record<string, TableHomeMockData> = {
   // Game in progress — status row, "Playing:" line, disabled setup
-  // fields, Cash-ins/Cash-outs/End all enabled.
+  // fields, Cash-ins/Cash-outs enabled. End is enabled by gameState but
+  // blocked by the "3 haven't cashed out" badge until those get entered.
   'static-friday-night': {
     tableInfo: { title: 'Friday Night', usualBuyIn: 500, usualChips: 1000, status: 'in progress', sessionRow: 3, useAlias: false },
     gameInfo: {
@@ -48,12 +49,14 @@ const mockByTable: Record<string, TableHomeMockData> = {
       date: new Date().toISOString().slice(0, 10),
       ratio: 0.5,
       buyInAmount: 500,
+      // None cashed out yet — a realistic in-progress state that also
+      // demonstrates the End button's "haven't cashed out" badge/gating.
       players: [
-        { name: 'Aarav', alias: '', buyIns: 2, finalChips: 0 },
-        { name: 'Bhavna', alias: '', buyIns: 1, finalChips: 0 },
-        { name: 'Chirag', alias: '', buyIns: 1, finalChips: 0 },
-        { name: 'Divya', alias: '', buyIns: 0, finalChips: 0 },
-        { name: 'Esha', alias: '', buyIns: 0, finalChips: 0 },
+        { name: 'Aarav', alias: '', buyIns: 2, finalChips: 0, cashedOut: false },
+        { name: 'Bhavna', alias: '', buyIns: 1, finalChips: 0, cashedOut: false },
+        { name: 'Chirag', alias: '', buyIns: 1, finalChips: 0, cashedOut: false },
+        { name: 'Divya', alias: '', buyIns: 0, finalChips: 0, cashedOut: false },
+        { name: 'Esha', alias: '', buyIns: 0, finalChips: 0, cashedOut: false },
       ],
     },
     players,
@@ -69,8 +72,8 @@ const mockByTable: Record<string, TableHomeMockData> = {
       ratio: 0.4,
       buyInAmount: 200,
       players: [
-        { name: 'Aarav', alias: '', buyIns: 3, finalChips: 640 },
-        { name: 'Bhavna', alias: '', buyIns: 2, finalChips: 210 },
+        { name: 'Aarav', alias: '', buyIns: 3, finalChips: 640, cashedOut: true },
+        { name: 'Bhavna', alias: '', buyIns: 2, finalChips: 210, cashedOut: true },
       ],
     },
     players,

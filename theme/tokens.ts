@@ -58,10 +58,18 @@ export type Theme = {
     weight: { regular: TextStyle['fontWeight']; medium: TextStyle['fontWeight']; bold: TextStyle['fontWeight'] };
     // Cormorant Garamond ships one file per weight — RN can't synthesize
     // bold/medium from a single custom font file the way it does for
-    // system fonts, so `fontWeight` alone doesn't do anything once a
-    // custom `fontFamily` is set. Every Text style pairs `weight.X` with
-    // `family.X` for that reason (see App.tsx's useFonts call, which
-    // loads exactly these three).
+    // system fonts, so weight comes entirely from *which* font file
+    // `family.X` points at, not from `fontWeight`. Every Text style
+    // pairs `weight.X` with `family.X` (see App.tsx's useFonts call,
+    // which loads exactly these three) purely for readability at each
+    // call site — `weight.X` itself is always 'normal' (see `font`
+    // below) and does nothing, on purpose: on Android specifically,
+    // setting an actual bold/numeric fontWeight *alongside* a custom
+    // fontFamily makes it go looking for a bolder variant of that named
+    // family, which doesn't exist, and it silently falls back to the
+    // system font instead of the real Cormorant Garamond bold file —
+    // confirmed live (regular text rendered correctly, bold didn't).
+    // iOS doesn't have this bug, which is why it worked there first.
     family: { regular: string; medium: string; bold: string };
   };
   cardShadow: ViewStyle;
@@ -71,7 +79,9 @@ const spacing = (mult: number) => mult * 4;
 
 const font: Theme['font'] = {
   size: { xs: 12, sm: 13, md: 15, lg: 17, xl: 20, xxl: 24 },
-  weight: { regular: '400', medium: '600', bold: '700' },
+  // All 'normal' — see the Theme type's own comment on `weight` above
+  // for why an actual numeric/bold value here breaks Android.
+  weight: { regular: 'normal', medium: 'normal', bold: 'normal' },
   family: { regular: 'CormorantGaramond_400Regular', medium: 'CormorantGaramond_500Medium', bold: 'CormorantGaramond_700Bold' },
 };
 

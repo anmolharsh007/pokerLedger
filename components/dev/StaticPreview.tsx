@@ -14,17 +14,16 @@
  * fixed and the real sign-in flow works again.
  */
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 
 import TableHome from '../TableHome';
 import CardButton from '../ui/CardButton';
-import StyleVariantToggle from '../ui/StyleVariantToggle';
 import ThemeToggle from '../ui/ThemeToggle';
 import { getMockTableData, mockTables, mockTableSummaries } from '../../lib/dev/staticMockData';
 import { cardTintFor } from '../../theme/cardTints';
-import { useStyleVariant, useTheme } from '../../theme/ThemeProvider';
+import { useTheme } from '../../theme/ThemeProvider';
 import type { Theme } from '../../theme/tokens';
 
 type Props = {
@@ -33,9 +32,15 @@ type Props = {
 
 export default function StaticPreview({ onExit }: Props) {
   const theme = useTheme();
-  const styleVariant = useStyleVariant();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [openTableId, setOpenTableId] = useState<string | null>(null);
+
+  // Explicit pixel width, not a `width: '49%'` — see App.tsx's own
+  // tableCardWidth for why (confirmed cross-platform Yoga difference).
+  const { width: windowWidth } = useWindowDimensions();
+  const TABLE_GRID_PADDING = 16; // matches styles.list's own padding
+  const TABLE_GRID_GAP = 8; // matches styles.tableGrid's own gap
+  const tableCardWidth = (windowWidth - TABLE_GRID_PADDING * 2 - TABLE_GRID_GAP) / 2;
 
   return (
     <LinearGradient colors={theme.gradients.background} style={styles.container}>
@@ -49,7 +54,6 @@ export default function StaticPreview({ onExit }: Props) {
         )}
         <View style={styles.headerActions}>
           <ThemeToggle />
-          <StyleVariantToggle />
           <Pressable onPress={onExit}>
             <Text style={styles.exitText}>Exit preview</Text>
           </Pressable>
@@ -65,26 +69,26 @@ export default function StaticPreview({ onExit }: Props) {
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           <Text style={styles.notice}>Hardcoded data — nothing on this screen reaches the backend.</Text>
-          <View style={[styles.tableGrid, styleVariant === 'C' && styles.gridRowGapForBadges]}>
+          <View style={styles.tableGrid}>
             {mockTables.map((table, i) => (
-              <CardButton
-                key={table.id}
-                onPress={() => setOpenTableId(table.spreadsheetId)}
-                tint={cardTintFor(i)}
-                badge="TABLE"
-                style={styles.tableCard}>
-                <Text style={styles.tableCardIcon}>♠</Text>
-                <View style={styles.tableCardBody}>
-                  <Text style={styles.tableCardName} numberOfLines={2}>
-                    {table.name}
-                  </Text>
-                  {(mockTableSummaries[table.spreadsheetId] ?? []).length > 0 ? (
-                    <Text style={styles.tableCardSummary} numberOfLines={2}>
-                      {mockTableSummaries[table.spreadsheetId].join(' · ')}
+              <View key={table.id} style={{ width: tableCardWidth }}>
+                <CardButton
+                  onPress={() => setOpenTableId(table.spreadsheetId)}
+                  tint={cardTintFor(i)}
+                  badge="TABLE"
+                  style={styles.tableCard}>
+                  <View style={styles.tableCardBody}>
+                    <Text style={styles.tableCardName} numberOfLines={2}>
+                      {table.name}
                     </Text>
-                  ) : null}
-                </View>
-              </CardButton>
+                    {(mockTableSummaries[table.spreadsheetId] ?? []).length > 0 ? (
+                      <Text style={styles.tableCardSummary} numberOfLines={2}>
+                        {mockTableSummaries[table.spreadsheetId].join(' · ')}
+                      </Text>
+                    ) : null}
+                  </View>
+                </CardButton>
+              </View>
             ))}
           </View>
         </ScrollView>
@@ -110,20 +114,11 @@ const createStyles = (theme: Theme) =>
     title: { fontSize: theme.font.size.xl, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
     backText: { fontSize: theme.font.size.lg, color: theme.colors.accent, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
     exitText: { color: theme.colors.danger, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
-    list: { padding: 20, gap: 16 },
+    list: { padding: 16, gap: 16 },
     notice: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
-    tableGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-    gridRowGapForBadges: { rowGap: 24 },
-    tableCard: { width: '47%' },
-    tableCardIcon: {
-      fontSize: 34,
-      color: theme.colors.accent,
-      textAlign: 'center',
-      textShadowColor: 'rgba(0,0,0,0.3)',
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 2,
-    },
-    tableCardBody: { gap: 4 },
-    tableCardName: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
-    tableCardSummary: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
+    tableGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, rowGap: 16 },
+    tableCard: { width: '100%', aspectRatio: 0.82, paddingHorizontal: theme.spacing(3) },
+    tableCardBody: { gap: 8 },
+    tableCardName: { fontSize: theme.font.size.xl * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    tableCardSummary: { fontSize: theme.font.size.xs * 1.3, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
   });

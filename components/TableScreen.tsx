@@ -159,10 +159,10 @@ export default function TableScreen({ spreadsheetId, userId, tableName, getAcces
         <Text style={styles.sectionTitle}>Players</Text>
         <View style={styles.headerActions}>
           <Pressable
-            style={[styles.aliasToggle, useAlias && { backgroundColor: theme.colors.accent }]}
+            style={[styles.aliasToggle, useAlias && styles.aliasToggleActive]}
             disabled={togglingAlias}
             onPress={handleToggleAlias}>
-            <Text style={[styles.aliasToggleText, useAlias && { color: theme.colors.accentText }]}>Use alias</Text>
+            <Text style={styles.aliasToggleText}>Use alias</Text>
           </Pressable>
           <IconButton icon="⟳" onPress={onChanged} />
         </View>
@@ -237,10 +237,12 @@ const createStyles = (theme: Theme) =>
       paddingHorizontal: 10,
       borderRadius: theme.radius.pill,
       borderWidth: 1,
-      borderColor: theme.colors.accent,
+      borderColor: theme.colors.border,
       minWidth: 74,
       alignItems: 'center',
     },
+    // On: a thicker accent border instead of a fill — still border only.
+    aliasToggleActive: { borderWidth: 2, borderColor: theme.colors.accent },
     aliasToggleText: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.accent },
     sectionTitle: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary, marginTop: 8 },
     empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
@@ -253,8 +255,9 @@ const createStyles = (theme: Theme) =>
     },
     accountInfo: { flex: 1, gap: 2 },
     accountBadge: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, color: theme.colors.textSecondary },
-    playerName: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
-    playerEmail: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary },
+    // Card text sized up 30% (same bump app-wide).
+    playerName: { fontSize: theme.font.size.md * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
+    playerEmail: { fontSize: theme.font.size.sm * 1.3, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary },
     newAccountForm: { gap: 10 },
     newAccountActions: { flexDirection: 'row', gap: 10 },
     flexBtn: { flex: 1 },

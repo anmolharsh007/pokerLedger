@@ -4,16 +4,18 @@
  * lib/auth/googleAuthProvider.ts persists its session, so the choice
  * survives a reload; defaults to 'felt' the first time.
  *
- * Also carries `styleVariant` — a second, independent toggle (A/B/C)
- * for how glossy/metallic the buttons and cards render (see
- * GradientSurface and Card's `tint`/`badge`), so the two axes — color
- * theme and gloss style — can be compared separately.
+ * `styleVariant` used to be a second, independent toggle (A/B/C) for
+ * how glossy/metallic the buttons and cards render (see GradientSurface
+ * and Card's `tint`/`badge`) — that comparison is settled now (C won),
+ * so it's a fixed constant rather than a switchable one, and the
+ * toggle UI that used to set it is gone. Screens still read it via
+ * `useStyleVariant()` (unchanged call sites), it just can't be changed
+ * anymore.
  *
  * Usage: wrap the app in <ThemeProvider>, then read `const theme =
  * useTheme()` anywhere for colors/spacing/etc., `useThemeSwitch()` for
- * { themeName, setThemeName } to build the theme toggle, `useStyleVariant()`
- * for the current A/B/C, or `useStyleVariantSwitch()` for { styleVariant,
- * setStyleVariant } to build that toggle.
+ * { themeName, setThemeName } to build the theme toggle, or
+ * `useStyleVariant()` for the fixed style variant ('C').
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -24,29 +26,25 @@ const STORAGE_KEY = 'theme.selection.v1';
 const DEFAULT_THEME: ThemeName = 'felt';
 
 export type StyleVariant = 'A' | 'B' | 'C';
-const STYLE_VARIANT_KEY = 'styleVariant.selection.v1';
-const DEFAULT_STYLE_VARIANT: StyleVariant = 'C';
+// No longer switchable (see this file's module comment) — 'C' won the
+// A/B/C comparison, so every useStyleVariant() call site just gets it.
+const FIXED_STYLE_VARIANT: StyleVariant = 'C';
 
 type ThemeContextValue = {
   theme: Theme;
   themeName: ThemeName;
   setThemeName: (name: ThemeName) => void;
   styleVariant: StyleVariant;
-  setStyleVariant: (variant: StyleVariant) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeName, setThemeNameState] = useState<ThemeName>(DEFAULT_THEME);
-  const [styleVariant, setStyleVariantState] = useState<StyleVariant>(DEFAULT_STYLE_VARIANT);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((saved) => {
       if (saved === 'felt' || saved === 'warm') setThemeNameState(saved);
-    });
-    AsyncStorage.getItem(STYLE_VARIANT_KEY).then((saved) => {
-      if (saved === 'A' || saved === 'B' || saved === 'C') setStyleVariantState(saved);
     });
   }, []);
 
@@ -55,14 +53,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     AsyncStorage.setItem(STORAGE_KEY, name).catch(() => {});
   };
 
-  const setStyleVariant = (variant: StyleVariant) => {
-    setStyleVariantState(variant);
-    AsyncStorage.setItem(STYLE_VARIANT_KEY, variant).catch(() => {});
-  };
-
   const value = useMemo<ThemeContextValue>(
-    () => ({ theme: themes[themeName], themeName, setThemeName, styleVariant, setStyleVariant }),
-    [themeName, styleVariant]
+    () => ({ theme: themes[themeName], themeName, setThemeName, styleVariant: FIXED_STYLE_VARIANT }),
+    [themeName]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
@@ -85,9 +78,4 @@ export function useThemeSwitch(): Pick<ThemeContextValue, 'themeName' | 'setThem
 
 export function useStyleVariant(): StyleVariant {
   return useThemeContext().styleVariant;
-}
-
-export function useStyleVariantSwitch(): Pick<ThemeContextValue, 'styleVariant' | 'setStyleVariant'> {
-  const { styleVariant, setStyleVariant } = useThemeContext();
-  return { styleVariant, setStyleVariant };
 }

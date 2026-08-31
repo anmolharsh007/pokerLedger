@@ -21,9 +21,15 @@ type Props = {
   getAccessToken: () => Promise<string>;
   hostEmail: string;
   onBack: () => void;
+  // Players and Player Accounts used to be two separate home-screen
+  // buttons — merged into one ("Players"). This link is how the other
+  // screen (global reusable profiles, not this one's per-table roster)
+  // stays reachable. Optional so this screen still works stand-alone
+  // (e.g. if it's ever reused without that merge).
+  onOpenAccounts?: () => void;
 };
 
-export default function AllPlayersScreen({ tables, getAccessToken, hostEmail, onBack }: Props) {
+export default function AllPlayersScreen({ tables, getAccessToken, hostEmail, onBack, onOpenAccounts }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [byName, setByName] = useState<Map<string, PlayerRow[]>>(new Map());
@@ -78,7 +84,13 @@ export default function AllPlayersScreen({ tables, getAccessToken, hostEmail, on
           <Text style={styles.backLinkText}>‹ Tables</Text>
         </Pressable>
         <Text style={styles.title}>All Players</Text>
-        <View style={{ width: 60 }} />
+        {onOpenAccounts ? (
+          <Pressable onPress={onOpenAccounts}>
+            <Text style={styles.backLinkText}>Accounts ›</Text>
+          </Pressable>
+        ) : (
+          <View style={{ width: 60 }} />
+        )}
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}

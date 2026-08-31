@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import AllPlayersScreen from './components/AllPlayersScreen';
 import PlayerAccountsScreen from './components/PlayerAccountsScreen';
@@ -12,7 +12,6 @@ import TableHome from './components/TableHome';
 import Button from './components/ui/Button';
 import CardButton from './components/ui/CardButton';
 import ModalCard from './components/ui/ModalCard';
-import StyleVariantToggle from './components/ui/StyleVariantToggle';
 import TextField from './components/ui/TextField';
 import ThemeToggle from './components/ui/ThemeToggle';
 import StaticPreview from './components/dev/StaticPreview';
@@ -26,7 +25,7 @@ import { PokerLedgerService } from './lib/pokerActions';
 import { APP_NAME, DEFAULT_SHEET_NAME, pokerLedgerSeed } from './lib/pokerLedgerSeed';
 import { removeLinkedSheet, type LinkedSheet } from './lib/sheetRegistry';
 import { cardTintFor } from './theme/cardTints';
-import { ThemeProvider, useStyleVariant, useTheme } from './theme/ThemeProvider';
+import { ThemeProvider, useTheme } from './theme/ThemeProvider';
 import type { Theme } from './theme/tokens';
 
 const auth = new GoogleAuthProvider();
@@ -62,8 +61,19 @@ export default function App() {
 
 function AppContent() {
   const theme = useTheme();
-  const styleVariant = useStyleVariant();
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Table cards are sized in real pixels, not a `width: '49%'` — that
+  // percentage resolves against CardButton's own Pressable, which has no
+  // explicit width of its own (content-sized). Android's Yoga apparently
+  // walks up to the nearest definite-width ancestor to resolve it;
+  // iOS's doesn't — confirmed live, the same percentage silently fell
+  // back to intrinsic content size there (a single narrow column instead
+  // of 2-per-row). A fixed pixel width sidesteps the ambiguity on both.
+  const { width: windowWidth } = useWindowDimensions();
+  const TABLE_GRID_PADDING = 16; // matches styles.list's own padding
+  const TABLE_GRID_GAP = 8; // matches styles.tableGrid's own gap
+  const tableCardWidth = (windowWidth - TABLE_GRID_PADDING * 2 - TABLE_GRID_GAP) / 2;
 
   // Bypasses sign-in/the Sheets backend entirely — see components/dev/StaticPreview.tsx.
   const [staticPreview, setStaticPreview] = useState(false);
@@ -224,6 +234,16 @@ function AppContent() {
 
   const handleCreateTable = async (name: string) => {
     if (!user) return;
+    // Belt and suspenders — the Create button is already disabled while
+    // the field's blank (the real, user-facing guard), but this is the
+    // one place a sheet actually gets created, so it shouldn't trust a
+    // typed name never reaching here some other way. A plain no-op, not
+    // setTablesError: that drives a full-screen error view replacing
+    // this whole form, which is the wrong response to a blank field the
+    // user is still looking at and can just fix in place. No silent
+    // DEFAULT_SHEET_NAME fallback anymore either — an empty name means
+    // no table gets created, full stop.
+    if (!name.trim()) return;
     setCreatingTable(true);
     setTablesError(null);
     try {
@@ -355,7 +375,6 @@ function AppContent() {
       <LinearGradient colors={theme.gradients.background} style={styles.center}>
         <View style={[styles.themeToggleFloating, styles.headerActions]}>
           <ThemeToggle />
-          <StyleVariantToggle />
         </View>
         <Text style={styles.title}>Poker Ledger</Text>
         <Text style={styles.subtitle}>Sign in to load your tables.</Text>
@@ -387,7 +406,6 @@ function AppContent() {
           </Pressable>
           <View style={styles.headerActions}>
             <ThemeToggle />
-            <StyleVariantToggle />
             <Pressable onPress={handleSignOut}>
               <Text style={styles.signOutText}>Sign out</Text>
             </Pressable>
@@ -407,6 +425,10 @@ function AppContent() {
           getAccessToken={() => auth.getAccessToken()}
           hostEmail={user.email ?? ''}
           onBack={() => setShowAllPlayers(false)}
+          onOpenAccounts={() => {
+            setShowAllPlayers(false);
+            setShowAccountsScreen(true);
+          }}
         />
         <StatusBar style={theme.statusBarStyle} />
       </LinearGradient>
@@ -428,15 +450,16 @@ function AppContent() {
         <Text style={styles.title}>{user.displayName || user.email || 'Poker Ledger'}</Text>
         <View style={styles.headerActions}>
           <ThemeToggle />
-          <StyleVariantToggle />
           <Pressable onPress={() => setShowScanClaim(true)}>
             <Text style={styles.headerLinkText}>Scan</Text>
           </Pressable>
+          {/* Players and Player Accounts used to be two separate header
+              buttons — merged into one entry point. AllPlayersScreen
+              (the cross-table roster + QR-claim flow) carries a small
+              link of its own through to PlayerAccountsScreen (the
+              global reusable-profile directory) instead. */}
           <Pressable onPress={() => setShowAllPlayers(true)}>
             <Text style={styles.headerLinkText}>Players</Text>
-          </Pressable>
-          <Pressable onPress={() => setShowAccountsScreen(true)}>
-            <Text style={styles.headerLinkText}>Player Accounts</Text>
           </Pressable>
           <Pressable style={styles.refreshBtn} onPress={loadTables} onLongPress={handleVerifySheets} delayLongPress={500}>
             {verifying ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text style={styles.refreshBtnText}>⟳</Text>}
@@ -461,26 +484,30 @@ function AppContent() {
           {tables.length === 0 ? (
             <Text style={styles.empty}>No tables yet.</Text>
           ) : (
-            <View style={[styles.tableGrid, styleVariant === 'C' && styles.gridRowGapForBadges]}>
+            <View style={styles.tableGrid}>
               {tables.map((table, i) => (
-                <CardButton
-                  key={table.id}
-                  onPress={() => setSelectedSpreadsheetId(table.spreadsheetId)}
-                  tint={cardTintFor(i)}
-                  badge="TABLE"
-                  style={styles.tableCard}>
-                  <Text style={styles.tableCardIcon}>♠</Text>
-                  <View style={styles.tableCardBody}>
-                    <Text style={styles.tableCardName} numberOfLines={2}>
-                      {table.name}
-                    </Text>
-                    {(tableSummaries[table.spreadsheetId] ?? []).length > 0 ? (
-                      <Text style={styles.tableCardSummary} numberOfLines={2}>
-                        {tableSummaries[table.spreadsheetId].join(' · ')}
+                <View key={table.id} style={{ width: tableCardWidth }}>
+                  <CardButton
+                    onPress={() => setSelectedSpreadsheetId(table.spreadsheetId)}
+                    tint={cardTintFor(i)}
+                    // Same format as Group+'s cards — the identical gold
+                    // badge chip Group+ uses for "GROUP", straddling the
+                    // card's bottom edge, just labeled "TABLE" instead.
+                    badge="TABLE"
+                    style={styles.tableCard}>
+                    <View style={styles.tableCardBody}>
+                      {/* The real title (TableInfo!B1, read via tableSummaries)
+                          is the name to show — table.name can still be the
+                          generated Drive filename for a table linked before
+                          this device's registry/Firestore entry held the
+                          human-typed name. Falls back to table.name only
+                          while the title hasn't loaded yet (or is blank). */}
+                      <Text style={styles.tableCardName} numberOfLines={2}>
+                        {tableSummaries[table.spreadsheetId]?.[0] || table.name}
                       </Text>
-                    ) : null}
-                  </View>
-                </CardButton>
+                    </View>
+                  </CardButton>
+                </View>
               ))}
             </View>
           )}
@@ -497,7 +524,8 @@ function AppContent() {
                 <Button
                   label="Create"
                   loading={creatingTable}
-                  onPress={() => handleCreateTable(newTableName.trim() || DEFAULT_SHEET_NAME)}
+                  disabled={creatingTable || !newTableName.trim()}
+                  onPress={() => handleCreateTable(newTableName.trim())}
                   style={styles.flexBtn}
                 />
                 <Button
@@ -609,24 +637,27 @@ const createStyles = (theme: Theme) =>
       fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
     },
     error: { color: theme.colors.danger, textAlign: 'center' },
-    list: { padding: 20, gap: 16 },
+    list: { padding: 16, gap: 16 },
     empty: { color: theme.colors.textSecondary, textAlign: 'center', marginTop: 24 },
-    tableGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-    // Variant C's badge chip straddles a card's bottom edge — extra
-    // row spacing so it doesn't run into the next row's cards.
-    gridRowGapForBadges: { rowGap: 24 },
-    tableCard: { width: '47%' },
-    tableCardIcon: {
-      fontSize: 34,
-      color: theme.colors.accent,
-      textAlign: 'center',
-      textShadowColor: 'rgba(0,0,0,0.3)',
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 2,
+    // Two per row, always — each card's actual width comes from the
+    // wrapping View's explicit pixel width (AppContent's tableCardWidth),
+    // not a percentage here — see that computation's own comment for why.
+    tableGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, rowGap: 16 },
+    tableCard: {
+      width: '100%',
+      // Taller than Card's own portrait default (0.74) — more presence
+      // at the same 2-per-row width, room for the suit row without
+      // crowding the name.
+      aspectRatio: 0.82,
+      // Card's own portrait padding (16 all sides) left little width for
+      // the name to wrap into before truncating — this claims some of
+      // it back horizontally; paddingVertical is left alone (falls back
+      // to Card's own `padding`), only the sides shrink.
+      paddingHorizontal: theme.spacing(3),
     },
-    tableCardBody: { gap: 4 },
-    tableCardName: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
-    tableCardSummary: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
+    tableCardBody: { gap: 8 },
+    // Card text sized up 30% (same bump app-wide).
+    tableCardName: { fontSize: theme.font.size.xl * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
     newTableForm: { gap: 10 },
     newTableActions: { flexDirection: 'row', gap: 10 },
     flexBtn: { flex: 1 },

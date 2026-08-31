@@ -16,12 +16,16 @@
  *                      the same call), kept only for robustness
  *  - 'in_progress'  — status = "in progress"
  * All+/Group+/the buy-in fields are only editable in 'none'.
- * Cash-ins/Cash-outs/End need a game to exist. Leaderboard is always
- * enabled.
+ * Cash-ins/Cash-outs need a game to exist; End additionally needs every
+ * currently-playing player to have entered a cash-out (see
+ * notCashedOutPlayers / the badge+popup on the End button, and
+ * lib/pokerActions.ts's `cashedOut` flag for how "entered" is told apart
+ * from "still the default 0"). Game Sessions is always enabled.
  *
- * Group+/Cash-ins/Cash-outs/Leaderboard are placeholders this round
- * (later build phases, per the plan) — they respect the gating so the
- * layout reads correctly, but tapping just shows "coming soon".
+ * Players/Group+/Cash-ins/Cash-outs/Game Sessions all need a live sheet
+ * read, so in mock mode (components/dev/StaticPreview.tsx) they show a
+ * "not part of the preview" notice instead of navigating (`notInPreview`)
+ * rather than opening their real screen.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -29,24 +33,34 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import CashInScreen from './CashInScreen';
 import CashOutScreen from './CashOutScreen';
 import DoubleTapButton from './DoubleTapButton';
+import GameSessionsScreen from './GameSessionsScreen';
 import GroupScreen from './GroupScreen';
 import TableScreen from './TableScreen';
 import Button from './ui/Button';
-import Checkbox from './ui/Checkbox';
 import ChipStackIcon from './ui/ChipStackIcon';
-import GradientSurface from './ui/GradientSurface';
 import IconButton from './ui/IconButton';
 import ModalCard from './ui/ModalCard';
+import SelectTile from './ui/SelectTile';
 import TextField from './ui/TextField';
+import TrashIcon from './ui/TrashIcon';
 import { displayName } from '../lib/displayName';
-import { PokerLedgerService, type CurrentGameInfo, type GroupInfo, type Player, type TableInfoData } from '../lib/pokerActions';
+import { PokerLedgerService, type CurrentGameInfo, type GroupInfo, type Player, type SumCheckInfo, type TableInfoData } from '../lib/pokerActions';
 import { useTheme } from '../theme/ThemeProvider';
-import type { GradientStops, Theme } from '../theme/tokens';
+import type { Theme } from '../theme/tokens';
 
 // A fixed blue, not a theme token — "in progress" is a status, not a
 // brand color, so it stays the same blue in both Felt & Gold and Warm
-// Orange rather than picking up either theme's accent hue.
-const STATUS_ACTIVE_GRADIENT: GradientStops = ['#6fa4f7', '#2f6fed', '#1b45ad'];
+// Orange rather than picking up either theme's accent hue. Was a
+// 3-stop gradient for a filled pill; now just the border/text color.
+const STATUS_ACTIVE_COLOR = '#2f6fed';
+
+// "Usual buy-in" (a plain Button) and "Set game" (a DoubleTapButton,
+// whose double-ring border wants a bit more room than Button's single
+// border does) need to look the same height side by side — an explicit
+// shared height, passed to both, rather than trusting their two
+// different internal paddings/borders to coincidentally add up to the
+// same number.
+const SETUP_BTN_HEIGHT = 52;
 
 // Fixed color-coding for the two units the buy-in/chips fields deal
 // in — money (theme.colors.success, already green in both themes) vs.
@@ -83,8 +97,16 @@ function deriveGameState(tableInfo: TableInfoData | null): GameState {
   return 'none';
 }
 
-const notImplemented = (what: string) => Alert.alert(what, 'Coming in a later build round.');
 const notInPreview = (what: string) => Alert.alert(what, "Not part of the static preview — see the real flow once the backend is fixed.");
+
+// sum-check!D — buy-ins money in minus cash-outs money out for the
+// game, so far. 0 has no sign; a real deviation always does, since the
+// badge otherwise reads ambiguous ("140" doesn't say which direction).
+const formatDeviation = (deviation: number) => {
+  const rounded = Math.round(deviation);
+  if (rounded === 0) return '0';
+  return rounded > 0 ? `+${rounded}` : `${rounded}`;
+};
 
 export default function TableHome({ spreadsheetId, userId = '', getAccessToken, mock }: Props) {
   const theme = useTheme();
@@ -93,6 +115,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
 
   const [tableInfo, setTableInfo] = useState<TableInfoData | null>(null);
   const [gameInfo, setGameInfo] = useState<CurrentGameInfo | null>(null);
+  const [sumCheck, setSumCheck] = useState<SumCheckInfo | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [groups, setGroups] = useState<GroupInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +136,8 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
   const [showGroupScreen, setShowGroupScreen] = useState(false);
   const [showCashInScreen, setShowCashInScreen] = useState(false);
   const [showCashOutScreen, setShowCashOutScreen] = useState(false);
+  const [showGameSessions, setShowGameSessions] = useState(false);
+  const [showNotCashedOutPopup, setShowNotCashedOutPopup] = useState(false);
 
   // null = not yet selected (Start stays disabled); set by All+/Group+
   // locally — nothing is written to the sheet until Start commits it.
@@ -142,6 +167,10 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
     if (mock) {
       setTableInfo(mock.tableInfo);
       setGameInfo(mock.gameInfo);
+      // Not part of the lightweight mock model — the deviation badge
+      // just stays hidden in static preview (sum-check is a separate
+      // sheet tab, unrelated to gameInfo/tableInfo).
+      setSumCheck(null);
       setPlayers(mock.players);
       setGroups(mock.groups);
       setError(null);
@@ -150,14 +179,16 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
     }
     try {
       const accessToken = await getAccessToken();
-      const [info, game, roster, groupList] = await Promise.all([
+      const [info, game, sums, roster, groupList] = await Promise.all([
         service.getTableInfo(accessToken),
         service.getCurrentGameInfo(accessToken),
+        service.getSumCheck(accessToken),
         service.listPlayers(accessToken),
         service.listGroups(accessToken),
       ]);
       setTableInfo(info);
       setGameInfo(game);
+      setSumCheck(sums);
       setPlayers(roster);
       setGroups(groupList);
       setError(null);
@@ -177,7 +208,12 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
   // ("last played") one, even though gameInfo still points at that
   // same row until a new game overwrites it.
   const playingPlayers = gameState === 'in_progress' ? (gameInfo?.players ?? []).filter((p) => p.buyIns > 0) : [];
+  // Players still owed a cash-out entry — End stays blocked until this
+  // is empty (see endEnabled below); the badge on End and its popup
+  // both read straight from this same list.
+  const notCashedOutPlayers = playingPlayers.filter((p) => !p.cashedOut);
 
+  const setGameEnabled = gameState === 'none' && (Number(buyInText) || 0) > 0 && (Number(chipsText) || 0) > 0;
   const startEnabled =
     gameState === 'none' &&
     buyInConfirmed &&
@@ -188,7 +224,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
   const groupPlusEnabled = gameState === 'none';
   const cashInsEnabled = gameState === 'empty' || gameState === 'in_progress';
   const cashOutsEnabled = gameState === 'in_progress';
-  const endEnabled = gameState === 'in_progress';
+  const endEnabled = gameState === 'in_progress' && notCashedOutPlayers.length === 0;
 
   const applyMultiplier = (text: string, setText: (v: string) => void, factor: number) => {
     const current = Number(text) || 0;
@@ -199,6 +235,8 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
   const handleChipsTextChange = (v: string) => setChipsText(v);
 
   // Just a submit button — confirms the typed buy-in/chips, double-tap like Set players/All+/End.
+  // The button itself is disabled (setGameEnabled) whenever buy-in/chips
+  // aren't both set, so this check is a backstop, not the primary gate.
   const handleSetBuyIn = () => {
     if ((Number(buyInText) || 0) <= 0 || (Number(chipsText) || 0) <= 0) {
       Alert.alert('Set game', 'Enter a buy-in(₹) and chips amount first.');
@@ -248,7 +286,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
         date: new Date().toISOString().slice(0, 10),
         ratio: chips > 0 ? buyInAmount / chips : 0,
         buyInAmount,
-        players: players.map((p) => ({ name: p.name, alias: p.alias, buyIns: selected.has(p.name) ? 1 : 0, finalChips: 0 })),
+        players: players.map((p) => ({ name: p.name, alias: p.alias, buyIns: selected.has(p.name) ? 1 : 0, finalChips: 0, cashedOut: false })),
       });
       setBuyInConfirmed(false);
       setSelectedPlayers(null);
@@ -371,6 +409,18 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
     );
   }
 
+  if (showGameSessions) {
+    return (
+      <GameSessionsScreen
+        players={players}
+        spreadsheetId={spreadsheetId}
+        getAccessToken={getAccessToken}
+        useAlias={useAlias}
+        onBack={() => setShowGameSessions(false)}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -386,11 +436,6 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
       <View style={styles.titleRow}>
         <View style={styles.titleGroup}>
           <Text style={styles.title}>{tableInfo?.title || 'Poker Table'}</Text>
-          {buyInConfirmed && (
-            <Text style={styles.gameBuyInText}>
-              Game buy-in: (₹{buyInText}, #{chipsText})
-            </Text>
-          )}
         </View>
         <View style={styles.titleActions}>
           <IconButton icon="⟳" onPress={load} />
@@ -402,24 +447,12 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
         </View>
       </View>
 
-      <View style={styles.statusBar}>
-        {gameState === 'in_progress' && (
-          <GradientSurface colors={STATUS_ACTIVE_GRADIENT} style={[StyleSheet.absoluteFill, { borderRadius: theme.radius.pill }]} />
-        )}
-        <Text style={[styles.statusBarText, gameState === 'in_progress' && styles.statusBarTextActive]}>
-          {gameState === 'in_progress' ? 'Game in progress' : 'Last game played'}
-        </Text>
-        {gameState === 'in_progress' && (
-          <>
-            <View style={[styles.statusBarDivider, styles.statusBarDividerActive]} />
-            <IconButton icon="i" variant="accent" size={22} onPress={() => setShowInfo(true)} />
-          </>
-        )}
-      </View>
-
       <View style={styles.fieldsRow}>
         <View style={styles.fieldCol}>
-          <Text style={[styles.fieldLabel, styles.fieldLabelMoney]}>Buy-in (₹)</Text>
+          <View style={styles.fieldLabelRow}>
+            <Text style={styles.fieldLabelMoneyIcon}>💰</Text>
+            <Text style={[styles.fieldLabel, styles.fieldLabelMoney]}>Buy-in (₹)</Text>
+          </View>
           <TextField
             style={[styles.fieldInputPill, styles.fieldInputPillMoney]}
             value={buyInText}
@@ -431,12 +464,16 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
             <Pressable
               style={({ pressed }) => [styles.multiplierBtn, styles.multiplierBtnDown, pressed && styles.multiplierBtnDownPressed]}
               onPress={() => applyMultiplier(buyInText, handleBuyInTextChange, 0.5)}>
-              <Text style={[styles.multiplierText, styles.multiplierTextDown]}>0.5x</Text>
+              <Text style={[styles.multiplierText, styles.multiplierTextDown]}>
+                0.5<Text style={styles.multiplierTextX}>x</Text>
+              </Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.multiplierBtn, styles.multiplierBtnUp, pressed && styles.multiplierBtnUpPressed]}
               onPress={() => applyMultiplier(buyInText, handleBuyInTextChange, 2)}>
-              <Text style={[styles.multiplierText, styles.multiplierTextUp]}>2x</Text>
+              <Text style={[styles.multiplierText, styles.multiplierTextUp]}>
+                2<Text style={styles.multiplierTextX}>x</Text>
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -456,12 +493,16 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
             <Pressable
               style={({ pressed }) => [styles.multiplierBtn, styles.multiplierBtnDown, pressed && styles.multiplierBtnDownPressed]}
               onPress={() => applyMultiplier(chipsText, handleChipsTextChange, 0.5)}>
-              <Text style={[styles.multiplierText, styles.multiplierTextDown]}>0.5x</Text>
+              <Text style={[styles.multiplierText, styles.multiplierTextDown]}>
+                0.5<Text style={styles.multiplierTextX}>x</Text>
+              </Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.multiplierBtn, styles.multiplierBtnUp, pressed && styles.multiplierBtnUpPressed]}
               onPress={() => applyMultiplier(chipsText, handleChipsTextChange, 2)}>
-              <Text style={[styles.multiplierText, styles.multiplierTextUp]}>2x</Text>
+              <Text style={[styles.multiplierText, styles.multiplierTextUp]}>
+                2<Text style={styles.multiplierTextX}>x</Text>
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -470,64 +511,55 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
       <View style={styles.setupRow}>
         {showUsualEditor ? (
           <View style={styles.usualEditRow}>
-            <TextField
-              style={styles.usualEditInput}
-              value={usualBuyInText}
-              onChangeText={setUsualBuyInText}
-              keyboardType="decimal-pad"
-              placeholder="₹"
-              autoFocus
-            />
+            <View style={styles.usualEditFieldGroup}>
+              <Text style={styles.usualEditIcon}>💰</Text>
+              <TextField
+                style={styles.usualEditInput}
+                value={usualBuyInText}
+                onChangeText={setUsualBuyInText}
+                keyboardType="decimal-pad"
+                placeholder="₹"
+                autoFocus
+              />
+            </View>
             <Text style={styles.usualEditSeparator}>|</Text>
-            <TextField
-              style={styles.usualEditInput}
-              value={usualChipsText}
-              onChangeText={setUsualChipsText}
-              keyboardType="number-pad"
-              placeholder="chips"
-            />
+            <View style={styles.usualEditFieldGroup}>
+              <ChipStackIcon size={13} />
+              <TextField
+                style={styles.usualEditInput}
+                value={usualChipsText}
+                onChangeText={setUsualChipsText}
+                keyboardType="number-pad"
+                placeholder="chips"
+              />
+            </View>
+            {/* Empty — no label, no icon. A small square, self-explanatory
+                as the one actionable control in this row. */}
             <Pressable
               style={({ pressed }) => [styles.usualUpdateBtn, pressed && styles.pressedDimSurface]}
-              onPress={handleSaveUsual}>
-              <Text style={styles.usualUpdateBtnText}>Set</Text>
-            </Pressable>
+              onPress={handleSaveUsual}
+            />
           </View>
         ) : (
           <Button
-            label="Usual buy-in"
+            label="💰 Usual buy-in"
             variant="secondary"
             disabled={gameState !== 'none'}
             onPress={handleUsualPress}
-            style={styles.setupBtn}
+            labelStyle={styles.usualBtnLabel}
+            style={[styles.setupBtn, styles.usualBtnNarrow, styles.setupBtnHeight]}
           />
         )}
-        <DoubleTapButton
-          label={buyInConfirmed ? 'Game set ✓' : 'Set game'}
-          armedLabel="Tap again to set"
-          disabled={gameState !== 'none'}
-          onConfirm={handleSetBuyIn}
-          style={styles.setupBtn}
-        />
-      </View>
-
-      <View style={styles.startRow}>
-        <DoubleTapButton
-          label={gameState === 'none' ? 'Set players' : 'Add players'}
-          armedLabel={gameState === 'none' ? 'Tap again to set players' : 'Tap again to add players'}
-          disabled={!startEnabled}
-          onConfirm={handleStart}
-          style={styles.setupBtn}
-        />
-        {selectedPlayers !== null && (
-          <>
-            <IconButton icon="▶" variant="accent" size={40} onPress={handleOpenSelectedPopup} />
-            <Pressable
-              style={({ pressed }) => [styles.clearSelectedBtn, pressed && styles.pressedDimSurface]}
-              onPress={() => setSelectedPlayers(null)}>
-              <Text style={styles.clearSelectedBtnText}>✕</Text>
-            </Pressable>
-          </>
-        )}
+        <View style={styles.setupBtn}>
+          <DoubleTapButton
+            label={buyInConfirmed ? 'Game set ✓' : 'Set game'}
+            armedLabel="Tap again to set"
+            disabled={!setGameEnabled}
+            onConfirm={handleSetBuyIn}
+            style={styles.setupBtnHeight}
+          />
+          <Text style={styles.ordinalBadge}>I</Text>
+        </View>
       </View>
 
       {/* Size A — the pre-game setup actions, most prominent. */}
@@ -536,15 +568,13 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
           style={({ pressed }) => [styles.gridBtnA, styles.gridPressableA, !allPlusEnabled && styles.gridDisabled, allPlusEnabled && pressed && styles.pressedDimSurface]}
           disabled={!allPlusEnabled}
           onPress={handleAllPlus}>
-          {allPlusEnabled && <GradientSurface colors={theme.gradients.accent} style={[StyleSheet.absoluteFill, { borderRadius: theme.radius.lg }]} />}
-          <Text style={[styles.gridTextA, !allPlusEnabled && styles.gridTextDisabled]}>👥 All+</Text>
+          <Text style={[styles.gridTextA, !allPlusEnabled && styles.gridTextDisabled]}>♣ All ➕</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.gridBtnA, styles.gridPressableA, !groupPlusEnabled && styles.gridDisabled, groupPlusEnabled && pressed && styles.pressedDimSurface]}
           disabled={!groupPlusEnabled}
           onPress={() => (mock ? notInPreview('Group+') : setShowGroupScreen(true))}>
-          {groupPlusEnabled && <GradientSurface colors={theme.gradients.accent} style={[StyleSheet.absoluteFill, { borderRadius: theme.radius.lg }]} />}
-          <Text style={[styles.gridTextA, !groupPlusEnabled && styles.gridTextDisabled]}>♣ Group+</Text>
+          <Text style={[styles.gridTextA, !groupPlusEnabled && styles.gridTextDisabled]}>👥 Group ➕</Text>
         </Pressable>
       </View>
 
@@ -554,14 +584,12 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
           style={({ pressed }) => [styles.gridBtnB, styles.gridPressableB, !cashInsEnabled && styles.gridDisabled, cashInsEnabled && pressed && styles.pressedDimSurface]}
           disabled={!cashInsEnabled}
           onPress={() => (mock ? notInPreview('Cash-ins') : setShowCashInScreen(true))}>
-          {cashInsEnabled && <GradientSurface colors={theme.gradients.accent} style={[StyleSheet.absoluteFill, { borderRadius: theme.radius.md }]} />}
-          <Text style={[styles.gridTextB, !cashInsEnabled && styles.gridTextDisabled]}>💵 Cash-ins</Text>
+          <Text style={[styles.gridTextB, !cashInsEnabled && styles.gridTextDisabled]}>💰 Cash-ins</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.gridBtnB, styles.gridPressableB, !cashOutsEnabled && styles.gridDisabled, cashOutsEnabled && pressed && styles.pressedDimSurface]}
           disabled={!cashOutsEnabled}
           onPress={() => (mock ? notInPreview('Cash-outs') : setShowCashOutScreen(true))}>
-          {cashOutsEnabled && <GradientSurface colors={theme.gradients.accent} style={[StyleSheet.absoluteFill, { borderRadius: theme.radius.md }]} />}
           <View style={styles.gridBtnContentRow}>
             <ChipStackIcon size={15} />
             <Text style={[styles.gridTextB, !cashOutsEnabled && styles.gridTextDisabled]}>Cash-outs</Text>
@@ -573,22 +601,87 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
       <View style={styles.grid}>
         <Pressable
           style={({ pressed }) => [styles.gridBtnC, styles.gridPressableC, pressed && styles.pressedDimSurface]}
-          onPress={() => notImplemented('Leaderboard')}>
-          <GradientSurface colors={theme.gradients.accent} style={[StyleSheet.absoluteFill, { borderRadius: theme.radius.sm }]} />
-          <Text style={styles.gridTextC}>🏆 Leaderboard</Text>
+          onPress={() => (mock ? notInPreview('Game Sessions') : setShowGameSessions(true))}>
+          <Text style={styles.gridTextC}>🏆 Game Sessions</Text>
         </Pressable>
-        <DoubleTapButton
-          label="End"
-          armedLabel="Tap again to end"
-          disabled={!endEnabled}
-          variant="danger"
-          onConfirm={handleEnd}
-          style={[styles.gridBtnC, styles.endSizeC]}
-        />
+        <View style={[styles.gridBtnC, styles.endWrap]}>
+          <DoubleTapButton
+            label=""
+            armedLabel="Tap again to end"
+            disabled={!endEnabled}
+            variant="danger"
+            onConfirm={handleEnd}
+            radius={theme.radius.sm}
+            style={styles.endSizeC}
+          />
+          {/* Count of playing players who haven't entered a cash-out yet
+              — End stays disabled (see endEnabled) until this reaches 0.
+              Only meaningful while a game's actually in progress. */}
+          {gameState === 'in_progress' && (
+            <Pressable
+              style={({ pressed }) => [styles.notCashedOutBadge, pressed && styles.pressedDimSurface]}
+              onPress={() => setShowNotCashedOutPopup(true)}>
+              <Text style={styles.notCashedOutBadgeText}>{notCashedOutPlayers.length}</Text>
+            </Pressable>
+          )}
+          {/* sum-check's deviation for this game — buy-ins money in minus
+              cash-outs money out, so far. Stays visible after End too
+              (gameInfo persists past "last played"), hidden only for a
+              table that's never had a game. */}
+          {gameInfo && sumCheck && (
+            <View style={styles.deviationBadge}>
+              <Text style={styles.deviationBadgeText}>💰 {formatDeviation(sumCheck.deviation)}</Text>
+            </View>
+          )}
+        </View>
       </View>
 
-      {/* Playing:, as a button — opens the players-playing popup rather
-          than always spelling every name out inline on the page. */}
+      {/* The whole bar opens the current-session info popup — not just a
+          small icon at its end — when a game's actually in progress.
+          Moved below the action grids (Game Sessions/End), not up near the
+          title, so the setup/action controls read first. */}
+      <Pressable
+        disabled={gameState !== 'in_progress'}
+        onPress={() => setShowInfo(true)}
+        style={({ pressed }) => [
+          styles.statusBar,
+          gameState === 'in_progress' && styles.statusBarActive,
+          gameState === 'in_progress' && pressed && styles.pressedDimSurface,
+        ]}>
+        <Text style={[styles.statusBarText, gameState === 'in_progress' && styles.statusBarTextActive]}>
+          {gameState === 'in_progress' ? 'Game in progress' : 'No game on'}
+        </Text>
+        {gameState === 'in_progress' && (
+          <>
+            <View style={styles.statusBarDivider} />
+            {/* Purely decorative now — a plain View, not its own
+                Pressable, since the bar above already handles the tap. */}
+            <View style={styles.statusBarInfoBadge}>
+              <Text style={styles.statusBarInfoBadgeText}>i</Text>
+            </View>
+          </>
+        )}
+      </Pressable>
+
+      {/* Selected-players preview (▶) and clear (trash icon) — sits right
+          under the status bar, ahead of "Set players"/"Add players"
+          itself (now the final action, moved to the bottom of the
+          screen) so the preview is visible before that button. */}
+      {selectedPlayers !== null && (
+        <View style={styles.selectedActionsRow}>
+          <IconButton icon="▶" variant="accent" size={40} onPress={handleOpenSelectedPopup} />
+          <Pressable
+            style={({ pressed }) => [styles.clearSelectedBtn, pressed && styles.pressedDimSurface]}
+            onPress={() => setSelectedPlayers(null)}>
+            <TrashIcon size={16} color={theme.colors.danger} />
+          </Pressable>
+        </View>
+      )}
+
+      {/* Playing:, directly below the status bar (moved down together
+          with it) — a full-width label rather than a floating pill.
+          Opens the players-playing popup rather than always spelling
+          every name out inline on the page. */}
       {playingPlayers.length > 0 && (
         <Pressable
           style={({ pressed }) => [styles.playingBtn, pressed && styles.pressedDimSurface]}
@@ -600,6 +693,22 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
           <Text style={styles.playingBtnChevron}>›</Text>
         </Pressable>
       )}
+
+      {/* Moved to the bottom of the screen — the final action once
+          everything above (buy-in, usual, All+/Group+ selection) has
+          been reviewed, rather than sitting right under "Set game". */}
+      <View style={styles.startRow}>
+        <View style={styles.setupBtn}>
+          <DoubleTapButton
+            label={gameState === 'none' ? 'Set players' : 'Add players'}
+            armedLabel={gameState === 'none' ? 'Tap again to set players' : 'Tap again to add players'}
+            disabled={!startEnabled}
+            onConfirm={handleStart}
+            style={styles.setupBtnHeight}
+          />
+          <Text style={styles.ordinalBadge}>II</Text>
+        </View>
+      </View>
 
       {/* Current session info popup */}
       <ModalCard visible={showInfo} onRequestClose={() => setShowInfo(false)}>
@@ -630,18 +739,37 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
         <Button label="Close" onPress={() => setShowPlayingModal(false)} />
       </ModalCard>
 
-      {/* Selected players preview — set locally by All+/Group+, not yet committed to the sheet.
-          Unchecking a name here only updates the staged popupChecked
-          set; the name stays visible and selectedPlayers isn't
-          touched until the popup closes (Close, or tapping outside). */}
+      {/* Haven't-cashed-out popup — triggered by End's top-right badge */}
+      <ModalCard visible={showNotCashedOutPopup} onRequestClose={() => setShowNotCashedOutPopup(false)}>
+        <Text style={styles.modalTitle}>Haven't cashed out</Text>
+        {notCashedOutPlayers.length === 0 ? (
+          <Text style={styles.modalLine}>Everyone's cashed out — End is ready.</Text>
+        ) : (
+          notCashedOutPlayers.map((p) => (
+            <Text key={p.name} style={styles.modalLine}>
+              {displayName(p, useAlias)}
+            </Text>
+          ))
+        )}
+        <Button label="Close" onPress={() => setShowNotCashedOutPopup(false)} />
+      </ModalCard>
+
+      {/* Selected players preview — set locally by All+/Group+, not yet
+          committed to the sheet. A 2-col grid of toggle tiles (see
+          components/ui/SelectTile.tsx), not a checkbox list. Toggling a
+          tile off here only updates the staged popupChecked set; the
+          name stays visible and selectedPlayers isn't touched until the
+          popup closes (Close, or tapping outside). */}
       <ModalCard visible={showSelectedPopup} onRequestClose={handleCloseSelectedPopup}>
         <Text style={styles.modalTitle}>Selected for next game</Text>
         {(selectedPlayers ?? []).length === 0 ? (
           <Text style={styles.modalLine}>No players selected.</Text>
         ) : (
-          (selectedPlayers ?? []).map((name) => (
-            <Checkbox key={name} checked={popupChecked.has(name)} onPress={() => togglePopupChecked(name)} label={selectedPlayerLabel(name)} />
-          ))
+          <View style={styles.selectedGrid}>
+            {(selectedPlayers ?? []).map((name) => (
+              <SelectTile key={name} selected={popupChecked.has(name)} onPress={() => togglePopupChecked(name)} label={selectedPlayerLabel(name)} />
+            ))}
+          </View>
         )}
         <Button label="Close" onPress={handleCloseSelectedPopup} />
       </ModalCard>
@@ -665,38 +793,54 @@ const createStyles = (theme: Theme) =>
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     titleGroup: { gap: 2 },
     title: { fontSize: theme.font.size.xxl, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
-    gameBuyInText: { fontSize: theme.font.size.sm, color: theme.colors.textSecondary, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium },
     titleActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     managePlayersLink: { paddingVertical: 6, paddingHorizontal: 10 },
     managePlayersLinkText: { color: theme.colors.accent, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
     // A full-width pill instead of bare text — the "i" info button sits
     // inside it, separated by a thin divider (statusBarDivider) rather
-    // than floating loose next to plain text. Filled solid blue while a
-    // game's in progress (a fixed status color, not a theme one) via the
-    // GradientSurface painted as this pill's first child; otherwise just
-    // the neutral surfaceAlt fallback below.
+    // than floating loose next to plain text. Transparent, border only,
+    // like every other button/card — a neutral border normally, the
+    // fixed status blue (border + text) once a game's in progress.
     statusBar: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      backgroundColor: theme.colors.surfaceAlt,
-      borderRadius: theme.radius.pill,
+      backgroundColor: 'transparent',
+      // Matches Button's own default radius (theme.radius.md) — same
+      // corner as "Usual buy-in" and the buy-in/chips fields below,
+      // rather than the fully-rounded pill this used to be.
+      borderRadius: theme.radius.md,
+      borderWidth: 1.5,
+      borderColor: theme.colors.border,
       paddingVertical: 10,
       paddingHorizontal: 16,
-      overflow: 'hidden',
     },
+    statusBarActive: { borderColor: STATUS_ACTIVE_COLOR },
     statusBarText: { flex: 1, fontSize: theme.font.size.md, color: theme.colors.textSecondary, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium },
-    statusBarTextActive: { color: '#fff' },
-    statusBarDivider: { width: 1, height: 20, backgroundColor: theme.colors.border },
-    statusBarDividerActive: { backgroundColor: 'rgba(255,255,255,0.35)' },
+    statusBarTextActive: { color: STATUS_ACTIVE_COLOR },
+    statusBarDivider: { width: 1, height: 20, backgroundColor: STATUS_ACTIVE_COLOR, opacity: 0.35 },
+    // Decorative only (see the render site's comment) — a bordered
+    // circle in the same fixed status blue as the bar around it.
+    statusBarInfoBadge: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 1.5,
+      borderColor: STATUS_ACTIVE_COLOR,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    statusBarInfoBadgeText: { color: STATUS_ACTIVE_COLOR, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: 12 },
     // The Playing: button — opens the currently-playing popup instead of
     // always spelling every name out inline on the page.
     playingBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      backgroundColor: theme.colors.surfaceAlt,
+      backgroundColor: 'transparent',
       borderRadius: theme.radius.pill,
+      borderWidth: 1.5,
+      borderColor: theme.colors.border,
       paddingVertical: 10,
       paddingHorizontal: 16,
     },
@@ -705,17 +849,20 @@ const createStyles = (theme: Theme) =>
     playingBtnChevron: { color: theme.colors.textSecondary, fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
     fieldsRow: { flexDirection: 'row', gap: 12 },
     fieldCol: { flex: 1, gap: 6 },
-    fieldLabel: { fontSize: theme.font.size.sm, color: theme.colors.textSecondary, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium },
+    fieldLabel: { fontSize: theme.font.size.sm * 1.25, color: theme.colors.textSecondary, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium },
     // Money (₹) vs. chips are two different units — a green/purple
     // tint on each pill (label + fill) makes that legible at a glance,
     // same "tint over the neutral fill" trick as the multiplier buttons.
     fieldLabelMoney: { color: theme.colors.success },
+    fieldLabelMoneyIcon: { fontSize: 13 },
     fieldLabelChips: { color: CHIPS_COLOR },
-    fieldLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    fieldLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
     // Chip/token pill — fully rounded, filled, centered text, no
     // border — reads like a poker chip rather than a form field.
     fieldInputPill: {
-      borderRadius: theme.radius.pill,
+      // Matches Button's own default radius (theme.radius.md) — same
+      // corner as "Usual buy-in" and the status bar above.
+      borderRadius: theme.radius.md,
       backgroundColor: theme.colors.surfaceAlt,
       borderWidth: 0,
       textAlign: 'center',
@@ -726,25 +873,88 @@ const createStyles = (theme: Theme) =>
     fieldInputPillMoney: { backgroundColor: `${theme.colors.success}1f`, color: theme.colors.success },
     fieldInputPillChips: { backgroundColor: `${CHIPS_COLOR}1f`, color: CHIPS_COLOR },
     multiplierCol: { flexDirection: 'row', gap: 6 },
-    multiplierBtn: { flex: 1, backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radius.sm, paddingVertical: 6, alignItems: 'center' },
+    multiplierBtn: { flex: 1, backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radius.sm, paddingVertical: 9, alignItems: 'center' },
     // 0.5x reads as a reduction, 2x as a boost — a red/green tint (over
     // the same neutral fill) makes that legible at a glance.
     multiplierBtnDown: { backgroundColor: `${theme.colors.danger}22` },
     multiplierBtnUp: { backgroundColor: `${theme.colors.success}22` },
     multiplierBtnDownPressed: { backgroundColor: `${theme.colors.danger}3d` },
     multiplierBtnUpPressed: { backgroundColor: `${theme.colors.success}3d` },
-    multiplierText: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, color: theme.colors.textSecondary },
+    multiplierText: { fontSize: theme.font.size.sm * 1.3, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, color: theme.colors.textSecondary },
+    // The "x" reads small next to the (now bigger) number — 0.5/2 are
+    // the part worth reading at a glance, "x" is just grammar.
+    multiplierTextX: { fontSize: theme.font.size.xs },
     multiplierTextDown: { color: theme.colors.danger },
     multiplierTextUp: { color: theme.colors.success },
     setupRow: { flexDirection: 'row', gap: 10 },
-    setupBtn: { flex: 1 },
+    setupBtn: { flex: 1, position: 'relative' },
+    // See SETUP_BTN_HEIGHT's own comment — passed to both the plain
+    // Button ("Usual buy-in") and the DoubleTapButton ("Set game"/"Set
+    // players") so they render the same height as each other.
+    setupBtnHeight: { height: SETUP_BTN_HEIGHT },
+    // Narrower than "Set game" beside it (flex 0.7 vs that button
+    // wrapper's default flex 1 from setupBtn) — "Usual buy-in" is the
+    // secondary of the two, so it gets less of the row.
+    usualBtnNarrow: { flex: 0.7 },
+    // 25% bigger than the base size, then 12% back down, then another
+    // 12% (still overflowing at the first reduction) — then one more
+    // 15% once the button itself got narrower (usualBtnNarrow), or the
+    // label would overflow the now-smaller box.
+    usualBtnLabel: { fontSize: theme.font.size.md * 1.25 * 0.88 * 0.88 * 0.85 },
+    // "I"/"II" — Set game and Set players are a fixed two-step sequence,
+    // even though "Set players" itself now renders at the bottom of the
+    // screen rather than right below "Set game" — the badges are the
+    // only thing left spelling out the order between them.
+    // A small badge sitting fully inside the button's own bottom-right
+    // corner (not overlapping past its edge) spells that out, faded
+    // translucent grey so it reads as a subtle sequence marker, not
+    // another loud label. A hard-edged rectangle (barely-rounded
+    // corners), not a pill, and italic — reads more like a stamped
+    // numeral than another button.
+    ordinalBadge: {
+      position: 'absolute',
+      bottom: 6,
+      right: 6,
+      backgroundColor: 'rgba(128,128,128,0.35)',
+      // theme.colors.textSecondary, not a hardcoded white — the grey
+      // badge sits over whichever theme's own background shows through
+      // its translucency, so the text needs to stay legible on both.
+      color: theme.colors.textSecondary,
+      fontSize: 10,
+      fontStyle: 'italic',
+      fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 2,
+      overflow: 'hidden',
+      zIndex: 2,
+    },
     usualEditRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+    usualEditFieldGroup: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
+    usualEditIcon: { fontSize: 13 },
     usualEditInput: { flex: 1, fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, paddingVertical: 8, paddingHorizontal: 8 },
     usualEditSeparator: { color: theme.colors.textSecondary, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
-    usualUpdateBtn: { backgroundColor: theme.colors.accent, borderRadius: theme.radius.sm, paddingVertical: 10, paddingHorizontal: 10 },
-    usualUpdateBtnText: { color: theme.colors.accentText, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.xs },
+    // A small square, floating centered (both axes) in the row — no
+    // label text (the button is the one actionable control here,
+    // self-explanatory without a word), half the size it started at.
+    usualUpdateBtn: {
+      width: 16,
+      height: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      alignSelf: 'center',
+      backgroundColor: 'transparent',
+      borderRadius: theme.radius.sm / 2,
+      borderWidth: 1.5,
+      borderColor: theme.colors.accent,
+    },
+    // "Set players"/"Add players" itself lives at the bottom of the
+    // screen now (see the render site's own comment) — this style just
+    // sizes/positions the row wherever it's rendered.
     startRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    // Icon-only now (✕, no "Clear" label) — a circle matching the ▶
+    // ▶ (selected-players preview) and 🗑 (clear) — sit below the status bar.
+    selectedActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    // Icon-only (TrashIcon, no "Clear" label) — a circle matching the ▶
     // button beside it, tinted danger since it's a destructive action.
     clearSelectedBtn: {
       width: 40,
@@ -752,57 +962,104 @@ const createStyles = (theme: Theme) =>
       borderRadius: 20,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: `${theme.colors.danger}22`,
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      borderColor: theme.colors.danger,
     },
-    clearSelectedBtnText: { fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.md, color: theme.colors.danger },
     // Three size tiers for the action grid — All+/Group+ (A) are the
     // prominent pre-game setup actions, Cash-ins/Cash-outs (B) are the
-    // frequent in-game ones, Leaderboard/End (C) are occasional
+    // frequent in-game ones, Game Sessions/End (C) are occasional
     // wrap-up actions. A > B > C in both footprint and type size.
     grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     gridBtnA: { width: '48%' },
     gridBtnB: { width: '48%' },
     gridBtnC: { width: '48%' },
-    // backgroundColor here is only the disabled-state fallback — when
-    // enabled, a GradientSurface layer painted as the Pressable's first
-    // child fully covers it (see gridDisabled, applied after this).
+    // Transparent, border only — accent-colored when enabled, a dim
+    // neutral border when not (see gridDisabled, applied after this).
     gridPressableA: {
-      backgroundColor: theme.colors.surfaceAlt,
+      backgroundColor: 'transparent',
       borderRadius: theme.radius.lg,
+      borderWidth: 1.5,
+      borderColor: theme.colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 24,
       minHeight: 88,
-      overflow: 'hidden',
     },
     gridPressableB: {
-      backgroundColor: theme.colors.surfaceAlt,
+      backgroundColor: 'transparent',
       borderRadius: theme.radius.md,
+      borderWidth: 1.5,
+      borderColor: theme.colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 14,
       minHeight: 56,
-      overflow: 'hidden',
     },
     gridPressableC: {
-      backgroundColor: theme.colors.surfaceAlt,
+      backgroundColor: 'transparent',
       borderRadius: theme.radius.sm,
+      borderWidth: 1.5,
+      borderColor: theme.colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 8,
       minHeight: 38,
-      overflow: 'hidden',
     },
     // Sizing-only (no fill color) version of the C tier, for End —
     // DoubleTapButton picks its own fill (danger red), so this only
-    // needs to shrink its footprint to match Leaderboard's.
-    endSizeC: { paddingVertical: 8, minHeight: 38, borderRadius: theme.radius.sm },
-    gridDisabled: { backgroundColor: theme.colors.surfaceAlt },
+    // needs to shrink its footprint to match Game Sessions'. No
+    // paddingVertical here — DoubleTapButton's own inner ring already
+    // carries fixed padding; stacking another one on the outer box on
+    // top of it is what made End's double border look overly spaced.
+    endSizeC: { minHeight: 38 },
+    // Wraps End's DoubleTapButton so its two corner badges (not-cashed-out
+    // count, sum-check deviation) can be absolutely positioned against a
+    // fixed-size box — DoubleTapButton itself carries gridBtnC's old
+    // `width: '48%'` only indirectly now, via stretching to fill this.
+    endWrap: { position: 'relative' },
+    notCashedOutBadge: {
+      position: 'absolute',
+      top: -6,
+      right: -6,
+      minWidth: 22,
+      height: 22,
+      paddingHorizontal: 5,
+      borderRadius: 11,
+      backgroundColor: theme.colors.danger,
+      borderWidth: 1.5,
+      borderColor: theme.colors.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 3,
+    },
+    notCashedOutBadgeText: { color: '#fff', fontSize: 11, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
+    // A pill, not a circle like notCashedOutBadge — "💰 +140" needs more
+    // room than a bare count does, and a fixed 22×22 box would either
+    // clip it or force a tiny illegible font.
+    deviationBadge: {
+      position: 'absolute',
+      bottom: -6,
+      right: -6,
+      minHeight: 22,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: theme.radius.pill,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1.5,
+      borderColor: theme.colors.borderStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 3,
+    },
+    deviationBadgeText: { color: theme.colors.textPrimary, fontSize: 11, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
+    gridDisabled: { borderColor: theme.colors.border },
     gridBtnContentRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    gridTextA: { color: theme.colors.accentText, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.xl },
-    gridTextB: { color: theme.colors.accentText, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.md },
-    gridTextC: { color: theme.colors.accentText, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, fontSize: theme.font.size.xs },
+    gridTextA: { color: theme.colors.accent, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.xl },
+    gridTextB: { color: theme.colors.accent, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.md * 1.25 },
+    gridTextC: { color: theme.colors.accent, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, fontSize: theme.font.size.xs },
     gridTextDisabled: { color: theme.colors.textSecondary },
     modalTitle: { fontSize: theme.font.size.lg, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
     modalLine: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, color: theme.colors.textPrimary },
+    selectedGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   });

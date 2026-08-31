@@ -1,0 +1,62 @@
+{
+  "project_info": {
+    "project_number": "339157808585",
+    "project_id": "poker-ledger-qzw2dd",
+    "storage_bucket": "poker-ledger-qzw2dd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:339157808585:android:687fcf8c8a3f1601fce418",
+        "android_client_info": {
+          "package_name": "com.anmolharsh.pokerledger"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "339157808585-i8lpbckju3e9ad9e475ui122d7tt6jnh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anmolharsh.pokerledger",
+            "certificate_hash": "a8d922f956ce59d027d861d13b3401a41b43bbbc"
+          }
+        },
+        {
+          "client_id": "339157808585-vbg02o0d8vc0ceiask32mtfbdj5lb6k1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anmolharsh.pokerledger",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "339157808585-0pkrghf704tdr4d56olqdeocse8v9ldi.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBut8gtagXte0oOIS1FAWZyCN_7VYiLIIQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "339157808585-0pkrghf704tdr4d56olqdeocse8v9ldi.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "339157808585-ucko76u339b2d33p8rlvqtko8902pn8d.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.anmolharsh.pokerledger"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

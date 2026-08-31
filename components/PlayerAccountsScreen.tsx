@@ -120,6 +120,7 @@ const createStyles = (theme: Theme) =>
     sectionTitle: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary, marginTop: 8 },
     empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
     accountRow: { paddingVertical: 12, paddingHorizontal: 16, gap: 2 },
-    accountAlias: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
-    accountDetail: { fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary },
+    // Card text sized up 30% (same bump app-wide).
+    accountAlias: { fontSize: theme.font.size.md * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary },
+    accountDetail: { fontSize: theme.font.size.sm * 1.3, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary },
   });

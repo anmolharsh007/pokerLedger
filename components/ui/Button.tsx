@@ -1,20 +1,18 @@
 /**
  * Shared themed button — replaces the primaryBtn/secondaryBtn pairs each
- * screen used to redeclare. `variant` picks the fill; everything else
- * (radius, padding, type scale) comes from the active theme so both
- * decorative designs stay visually consistent automatically.
+ * screen used to redeclare. `variant` picks the border/text color;
+ * everything else (radius, padding, type scale) comes from the active
+ * theme so both decorative designs stay visually consistent automatically.
  *
- * Primary/danger get a metallic GradientSurface painted as an
- * absolute-fill layer behind the label, instead of a flat backgroundColor
- * — Pressable itself still owns all real sizing (padding, flex, width),
- * so callers can keep passing plain layout styles. Secondary/ghost stay
- * flat on purpose — they're meant to read as quieter than the gradient CTAs.
+ * Every variant is transparent, border only — no gradient, no flat fill.
+ * `primary`/`danger` read as the "loud" actions via a full-strength
+ * accent/danger border+text; `secondary` is a quieter neutral border;
+ * `ghost` is quieter still (a faint border, dimmer text) for the least
+ * emphasized action on a screen.
  */
-import { ActivityIndicator, Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
-import GradientSurface from './GradientSurface';
 import { useTheme } from '../../theme/ThemeProvider';
-import type { GradientStops } from '../../theme/tokens';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
@@ -25,21 +23,20 @@ type Props = {
   disabled?: boolean;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
+  labelStyle?: StyleProp<TextStyle>; // per-instance override (e.g. a larger size for one particular button)
 };
 
-export default function Button({ label, onPress, variant = 'primary', disabled, loading, style }: Props) {
+export default function Button({ label, onPress, variant = 'primary', disabled, loading, style, labelStyle }: Props) {
   const theme = useTheme();
-  const { colors, radius, font, gradients } = theme;
+  const { colors, radius, font } = theme;
 
-  const gradientFor: Partial<Record<Variant, GradientStops>> = { primary: gradients.accent, danger: gradients.danger };
-  const flatFill: Record<Variant, { bg: string; fg: string; border?: string }> = {
-    primary: { bg: colors.accent, fg: colors.accentText },
-    secondary: { bg: colors.surfaceAlt, fg: colors.textPrimary },
-    danger: { bg: colors.danger, fg: '#fff' },
-    ghost: { bg: 'transparent', fg: colors.accent, border: colors.borderStrong },
+  const outlineFor: Record<Variant, { fg: string; border: string }> = {
+    primary: { fg: colors.accent, border: colors.accent },
+    secondary: { fg: colors.textPrimary, border: colors.borderStrong },
+    danger: { fg: colors.danger, border: colors.danger },
+    ghost: { fg: colors.textSecondary, border: colors.border },
   };
-  const { bg, fg, border } = flatFill[variant];
-  const gradientColors = !disabled ? gradientFor[variant] : undefined;
+  const { fg, border } = outlineFor[variant];
 
   return (
     <Pressable
@@ -48,19 +45,18 @@ export default function Button({ label, onPress, variant = 'primary', disabled, 
       style={({ pressed }) => [
         styles.base,
         {
-          backgroundColor: disabled ? colors.surfaceAlt : gradientColors ? undefined : bg,
+          backgroundColor: 'transparent',
           borderRadius: radius.md,
-          borderWidth: border ? 1 : 0,
-          borderColor: border,
-          opacity: disabled ? 0.6 : pressed ? 0.88 : 1,
+          borderWidth: 1.5,
+          borderColor: disabled ? colors.border : border,
+          opacity: disabled ? 0.5 : pressed ? 0.6 : 1,
         },
         style,
       ]}>
-      {gradientColors && <GradientSurface colors={gradientColors} style={[StyleSheet.absoluteFill, { borderRadius: radius.md }]} />}
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
-        <Text style={[styles.text, { color: disabled ? colors.textSecondary : fg, fontSize: font.size.md, fontFamily: font.family.bold, fontWeight: font.weight.bold }]}>
+        <Text style={[styles.text, { color: disabled ? colors.textSecondary : fg, fontSize: font.size.md, fontFamily: font.family.bold, fontWeight: font.weight.bold }, labelStyle]}>
           {label}
         </Text>
       )}
@@ -75,7 +71,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 48,
-    overflow: 'hidden',
   },
   text: { textAlign: 'center' },
 });

@@ -7,13 +7,15 @@
  * (see that method's doc comment for why).
  *
  * No +/- stepper buttons — the whole card *is* the control: tap
- * anywhere on a card to add a buy-in. Once it has one staged, the
- * card lights up (accent border + tint) and a full-width bar appears
- * across its top showing "+n" — that bar is itself the decrement
- * button (tap it to back the count off by one; it disappears again at
- * +0, since there's nothing left to decrement). Every tap also flashes
- * the card's fill briefly brighter before it settles back, so a change
- * registers as a beat, not just a number ticking.
+ * anywhere on a card to add a buy-in. Cards are transparent, border
+ * only, like everything else — a grey dashed border while empty, a
+ * solid accent border once a buy-in's staged (Card's own `highlighted`)
+ * — and a full-width bar appears across its top showing "+n" — that
+ * bar is itself the decrement button (tap it to back the count off by
+ * one; it disappears again at +0, since there's nothing left to
+ * decrement). Every tap also flashes the card briefly brighter before
+ * it settles back, so a change registers as a beat, not just a number
+ * ticking.
  */
 import { useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -119,7 +121,12 @@ export default function CashInScreen({ players, gameInfo, spreadsheetId, getAcce
             const delta = deltas[p.name] ?? 0;
             const warn = current.buyIns === 0 && delta > 0;
             return (
-              <Card key={p.row} portrait highlighted={delta > 0} style={styles.playerCard}>
+              <Card
+                key={p.row}
+                portrait
+                highlighted={delta > 0}
+                borderColor={delta > 0 ? undefined : theme.colors.border}
+                style={[styles.playerCard, delta === 0 && styles.playerCardDashed]}>
                 <Animated.View
                   pointerEvents="none"
                   style={[
@@ -168,13 +175,18 @@ const createStyles = (theme: Theme) =>
     empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
     playerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
     playerCard: { width: '47%' },
+    // Empty (no staged buy-in) cards get a dashed border instead of
+    // Card's own solid beveled default — a visual "nothing here yet"
+    // that a solid accent border (once highlighted) reads as filled in.
+    playerCardDashed: { borderStyle: 'dashed' },
     // Fills the card so tapping almost anywhere on it registers as
     // "add a buy-in" — the decrement bar (rendered after this, so it
     // paints on top) claims just its own strip at the very top.
     cardTapArea: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 4 },
-    playerName: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
-    banked: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
-    warning: { color: theme.colors.warning, fontSize: theme.font.size.xs, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, textAlign: 'center' },
+    // All card text sized up 30% (same bump app-wide).
+    playerName: { fontSize: theme.font.size.md * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    banked: { fontSize: theme.font.size.xs * 1.3, fontFamily: theme.font.family.regular, color: theme.colors.textSecondary, textAlign: 'center' },
+    warning: { color: theme.colors.warning, fontSize: theme.font.size.xs * 1.3, fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium, textAlign: 'center' },
     // The "+n" bar — both the display for the staged delta and, since
     // it's a button, the way to back it off. Only shown once there's
     // something to decrement.
@@ -188,10 +200,12 @@ const createStyles = (theme: Theme) =>
       justifyContent: 'center',
       gap: 4,
       paddingVertical: 7,
-      backgroundColor: theme.colors.accent,
+      backgroundColor: 'transparent',
+      borderBottomWidth: 1.5,
+      borderColor: theme.colors.accent,
       borderTopLeftRadius: theme.radius.lg,
       borderTopRightRadius: theme.radius.lg,
     },
-    decrementBarText: { color: theme.colors.accentText, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.md },
-    decrementBarChevron: { color: theme.colors.accentText, fontSize: theme.font.size.sm, fontFamily: theme.font.family.regular, opacity: 0.7 },
+    decrementBarText: { color: theme.colors.accent, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.md * 1.3 },
+    decrementBarChevron: { color: theme.colors.accent, fontSize: theme.font.size.sm * 1.3, fontFamily: theme.font.family.regular, opacity: 0.7 },
   });
