@@ -213,6 +213,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
   // both read straight from this same list.
   const notCashedOutPlayers = playingPlayers.filter((p) => !p.cashedOut);
 
+  const setGameEnabled = gameState === 'none' && (Number(buyInText) || 0) > 0 && (Number(chipsText) || 0) > 0;
   const startEnabled =
     gameState === 'none' &&
     buyInConfirmed &&
@@ -234,6 +235,8 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
   const handleChipsTextChange = (v: string) => setChipsText(v);
 
   // Just a submit button — confirms the typed buy-in/chips, double-tap like Set players/All+/End.
+  // The button itself is disabled (setGameEnabled) whenever buy-in/chips
+  // aren't both set, so this check is a backstop, not the primary gate.
   const handleSetBuyIn = () => {
     if ((Number(buyInText) || 0) <= 0 || (Number(chipsText) || 0) <= 0) {
       Alert.alert('Set game', 'Enter a buy-in(₹) and chips amount first.');
@@ -551,7 +554,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
           <DoubleTapButton
             label={buyInConfirmed ? 'Game set ✓' : 'Set game'}
             armedLabel="Tap again to set"
-            disabled={gameState !== 'none'}
+            disabled={!setGameEnabled}
             onConfirm={handleSetBuyIn}
             style={styles.setupBtnHeight}
           />
