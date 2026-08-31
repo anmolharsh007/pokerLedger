@@ -243,12 +243,18 @@ const createStyles = (theme: Theme) =>
       left: 0,
       right: 0,
       textAlign: 'center',
-      fontSize: theme.font.size.xs * 1.3,
+      // Slightly smaller than the card's other 1.3x-bumped text — it's a
+      // hint, not content, so it can sit a step quieter.
+      fontSize: theme.font.size.xs * 1.1,
       fontFamily: theme.font.family.regular,
       color: theme.colors.textSecondary,
       fontStyle: 'italic',
     },
-    chipsSet: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    // Row layout with no justifyContent stretches full-width by default
+    // (Card's own children aren't center-aligned) and left-aligns its
+    // content — centered here so the entered "Final chips" value reads
+    // the same as "Until now" beneath it, not offset to one side.
+    chipsSet: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
     chipsSetValue: { fontSize: theme.font.size.lg * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.accent },
     untilNowBox: {
       flexDirection: 'row',

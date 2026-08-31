@@ -547,7 +547,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
             disabled={gameState !== 'none'}
             onPress={handleUsualPress}
             labelStyle={styles.usualBtnLabel}
-            style={[styles.setupBtn, styles.setupBtnHeight]}
+            style={[styles.setupBtn, styles.usualBtnNarrow, styles.setupBtnHeight]}
           />
         )}
         <View style={styles.setupBtn}>
@@ -806,7 +806,10 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       gap: 10,
       backgroundColor: 'transparent',
-      borderRadius: theme.radius.pill,
+      // Matches Button's own default radius (theme.radius.md) — same
+      // corner as "Usual buy-in" and the buy-in/chips fields below,
+      // rather than the fully-rounded pill this used to be.
+      borderRadius: theme.radius.md,
       borderWidth: 1.5,
       borderColor: theme.colors.border,
       paddingVertical: 10,
@@ -857,7 +860,9 @@ const createStyles = (theme: Theme) =>
     // Chip/token pill — fully rounded, filled, centered text, no
     // border — reads like a poker chip rather than a form field.
     fieldInputPill: {
-      borderRadius: theme.radius.pill,
+      // Matches Button's own default radius (theme.radius.md) — same
+      // corner as "Usual buy-in" and the status bar above.
+      borderRadius: theme.radius.md,
       backgroundColor: theme.colors.surfaceAlt,
       borderWidth: 0,
       textAlign: 'center',
@@ -887,10 +892,15 @@ const createStyles = (theme: Theme) =>
     // Button ("Usual buy-in") and the DoubleTapButton ("Set game"/"Set
     // players") so they render the same height as each other.
     setupBtnHeight: { height: SETUP_BTN_HEIGHT },
+    // Narrower than "Set game" beside it (flex 0.7 vs that button
+    // wrapper's default flex 1 from setupBtn) — "Usual buy-in" is the
+    // secondary of the two, so it gets less of the row.
+    usualBtnNarrow: { flex: 0.7 },
     // 25% bigger than the base size, then 12% back down, then another
-    // 12% — still overflowing the button's own edges (emoji included)
-    // at the first reduction.
-    usualBtnLabel: { fontSize: theme.font.size.md * 1.25 * 0.88 * 0.88 },
+    // 12% (still overflowing at the first reduction) — then one more
+    // 15% once the button itself got narrower (usualBtnNarrow), or the
+    // label would overflow the now-smaller box.
+    usualBtnLabel: { fontSize: theme.font.size.md * 1.25 * 0.88 * 0.88 * 0.85 },
     // "I"/"II" — Set game and Set players are a fixed two-step sequence,
     // even though "Set players" itself now renders at the bottom of the
     // screen rather than right below "Set game" — the badges are the

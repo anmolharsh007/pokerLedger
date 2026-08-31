@@ -2,10 +2,12 @@
  * The design feature-flag switch — lets the two decorative themes
  * (theme/tokens.ts) be compared live instead of picking one at build
  * time. A two-segment pill, icon-only — a card-suit pairing instead of
- * plain dots: ♦ for the light theme (Warm Orange), ♠ for the dark one
+ * plain dots: ♢ for the light theme (Warm Orange), ♠ for the dark one
  * (Felt & Gold), read off each theme's own `isDark` flag rather than
- * hardcoding which name is which. The active segment fills with that
- * theme's own accent so the control previews the swap before you tap it.
+ * hardcoding which name is which. The diamond is the outline glyph (♢,
+ * not the solid ♦) so an unselected segment doesn't read as already
+ * filled in with that theme's own accent. The active segment fills with
+ * that theme's own accent so the control previews the swap before you tap it.
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -34,7 +36,7 @@ export default function ThemeToggle() {
               active && { backgroundColor: optionTheme.colors.accent },
             ]}>
             <Text style={[styles.icon, { color: active ? optionTheme.colors.accentText : theme.colors.textSecondary }]}>
-              {optionTheme.isDark ? '♠' : '♦'}
+              {optionTheme.isDark ? '♠' : '♢'}
             </Text>
           </Pressable>
         );
