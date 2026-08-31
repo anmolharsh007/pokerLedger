@@ -31,7 +31,7 @@
  *
  * `radius` (defaults to theme.radius.md) sizes both rings — a caller
  * that also overrides `borderRadius` via `style` (e.g. TableHome's End
- * button, sized down to match Leaderboard) must pass the same value
+ * button, sized down to match Game Sessions) must pass the same value
  * here too, or the inner ring's radius (computed from this prop) drifts
  * out of sync with the outer ring's (the actually-rendered one, since
  * `style` is applied last) and the double border stops looking concentric.

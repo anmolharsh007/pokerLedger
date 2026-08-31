@@ -484,6 +484,47 @@ export class PokerLedgerService {
   }
 
   /**
+   * One page of session-log rows, newest-first within the page — used by
+   * the Game Sessions screen, which loads history a batch at a time
+   * instead of reading the whole log at once. Sessions are always
+   * appended sequentially (addSession/startGame both use
+   * findNextEmptyRow), so there's never a gap between
+   * SESSION_DATA_FIRST_ROW and the last used row — a page is just a
+   * contiguous row-number window, no need to scan past it.
+   *
+   * `before`: exclusive upper row bound. Omit for the most recent page;
+   * pass the previous page's oldest session's `row` to page further back.
+   */
+  async listSessions(accessToken: string, limit: number, before?: number): Promise<{ sessions: CurrentGameInfo[]; hasMore: boolean }> {
+    const roster = await this.listPlayers(accessToken);
+    const lastCol =
+      roster.length > 0
+        ? PokerLedgerService.colToLetter(SESSION_LOG_FIRST_PLAYER_COL + roster.length * SESSION_LOG_COLS_PER_PLAYER - 1)
+        : 'C';
+
+    const endRowExclusive = before ?? (await this.findNextEmptyRow(TABS.sessionLog, 'A', SESSION_DATA_FIRST_ROW, accessToken));
+    const startRow = Math.max(SESSION_DATA_FIRST_ROW, endRowExclusive - limit);
+    if (startRow >= endRowExclusive) return { sessions: [], hasMore: false };
+
+    const rows = await this.readRange(TABS.sessionLog, `A${startRow}:${lastCol}${endRowExclusive - 1}`, accessToken);
+    const sessions: CurrentGameInfo[] = rows
+      .map((cells, i) => ({
+        row: startRow + i,
+        date: cells[0] ?? '',
+        ratio: Number(cells[1]) || 0,
+        buyInAmount: Number(cells[2]) || 0,
+        players: roster.map((player, pi) => {
+          const startCol = SESSION_LOG_FIRST_PLAYER_COL + pi * SESSION_LOG_COLS_PER_PLAYER;
+          return { name: player.name, alias: player.alias, buyIns: Number(cells[startCol]) || 0, finalChips: Number(cells[startCol + 1]) || 0 };
+        }),
+      }))
+      .filter((s) => s.date.trim() !== '')
+      .reverse(); // newest-first within this page
+
+    return { sessions, hasMore: startRow > SESSION_DATA_FIRST_ROW };
+  }
+
+  /**
    * Creates a new group: appends a column to groups-info (a plain
    * value write — groups-info's columns have no sub-header to merge,
    * unlike session-log's player blocks). Title goes in row 1; each
@@ -627,6 +668,16 @@ export type CurrentGameInfo = {
   buyInAmount: number;
   players: Array<{ name: string; alias: string; buyIns: number; finalChips: number }>;
 };
+
+/**
+ * A player's net result for one session: cash-out value minus buy-in
+ * cost. Same formula net-results' sheet-side SUMPRODUCT uses per-player
+ * lifetime (see addPlayer above), just for a single session instead of
+ * summed across all of them.
+ */
+export function sessionNet(entry: { buyIns: number; finalChips: number }, ratio: number, buyInAmount: number): number {
+  return entry.finalChips * ratio - entry.buyIns * buyInAmount;
+}
 
 export type GroupInfo = { name: string; members: string[] };
 

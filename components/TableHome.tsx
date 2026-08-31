@@ -16,12 +16,13 @@
  *                      the same call), kept only for robustness
  *  - 'in_progress'  — status = "in progress"
  * All+/Group+/the buy-in fields are only editable in 'none'.
- * Cash-ins/Cash-outs/End need a game to exist. Leaderboard is always
+ * Cash-ins/Cash-outs/End need a game to exist. Game Sessions is always
  * enabled.
  *
- * Group+/Cash-ins/Cash-outs/Leaderboard are placeholders this round
- * (later build phases, per the plan) — they respect the gating so the
- * layout reads correctly, but tapping just shows "coming soon".
+ * Players/Group+/Cash-ins/Cash-outs/Game Sessions all need a live sheet
+ * read, so in mock mode (components/dev/StaticPreview.tsx) they show a
+ * "not part of the preview" notice instead of navigating (`notInPreview`)
+ * rather than opening their real screen.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -29,6 +30,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import CashInScreen from './CashInScreen';
 import CashOutScreen from './CashOutScreen';
 import DoubleTapButton from './DoubleTapButton';
+import GameSessionsScreen from './GameSessionsScreen';
 import GroupScreen from './GroupScreen';
 import TableScreen from './TableScreen';
 import Button from './ui/Button';
@@ -92,7 +94,6 @@ function deriveGameState(tableInfo: TableInfoData | null): GameState {
   return 'none';
 }
 
-const notImplemented = (what: string) => Alert.alert(what, 'Coming in a later build round.');
 const notInPreview = (what: string) => Alert.alert(what, "Not part of the static preview — see the real flow once the backend is fixed.");
 
 export default function TableHome({ spreadsheetId, userId = '', getAccessToken, mock }: Props) {
@@ -122,6 +123,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
   const [showGroupScreen, setShowGroupScreen] = useState(false);
   const [showCashInScreen, setShowCashInScreen] = useState(false);
   const [showCashOutScreen, setShowCashOutScreen] = useState(false);
+  const [showGameSessions, setShowGameSessions] = useState(false);
 
   // null = not yet selected (Start stays disabled); set by All+/Group+
   // locally — nothing is written to the sheet until Start commits it.
@@ -380,6 +382,18 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
     );
   }
 
+  if (showGameSessions) {
+    return (
+      <GameSessionsScreen
+        players={players}
+        spreadsheetId={spreadsheetId}
+        getAccessToken={getAccessToken}
+        useAlias={useAlias}
+        onBack={() => setShowGameSessions(false)}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -573,8 +587,8 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
       <View style={styles.grid}>
         <Pressable
           style={({ pressed }) => [styles.gridBtnC, styles.gridPressableC, pressed && styles.pressedDimSurface]}
-          onPress={() => notImplemented('Leaderboard')}>
-          <Text style={styles.gridTextC}>🏆 Leaderboard</Text>
+          onPress={() => (mock ? notInPreview('Game Sessions') : setShowGameSessions(true))}>
+          <Text style={styles.gridTextC}>🏆 Game Sessions</Text>
         </Pressable>
         <DoubleTapButton
           label="🏁 End"
@@ -589,7 +603,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
 
       {/* The whole bar opens the current-session info popup — not just a
           small icon at its end — when a game's actually in progress.
-          Moved below the action grids (Leaderboard/End), not up near the
+          Moved below the action grids (Game Sessions/End), not up near the
           title, so the setup/action controls read first. */}
       <Pressable
         disabled={gameState !== 'in_progress'}
@@ -872,7 +886,7 @@ const createStyles = (theme: Theme) =>
     },
     // Three size tiers for the action grid — All+/Group+ (A) are the
     // prominent pre-game setup actions, Cash-ins/Cash-outs (B) are the
-    // frequent in-game ones, Leaderboard/End (C) are occasional
+    // frequent in-game ones, Game Sessions/End (C) are occasional
     // wrap-up actions. A > B > C in both footprint and type size.
     grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     gridBtnA: { width: '48%' },
@@ -912,7 +926,7 @@ const createStyles = (theme: Theme) =>
     },
     // Sizing-only (no fill color) version of the C tier, for End —
     // DoubleTapButton picks its own fill (danger red), so this only
-    // needs to shrink its footprint to match Leaderboard's. No
+    // needs to shrink its footprint to match Game Sessions'. No
     // paddingVertical here — DoubleTapButton's own inner ring already
     // carries fixed padding; stacking another one on the outer box on
     // top of it is what made End's double border look overly spaced.
