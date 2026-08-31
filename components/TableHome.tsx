@@ -16,8 +16,11 @@
  *                      the same call), kept only for robustness
  *  - 'in_progress'  — status = "in progress"
  * All+/Group+/the buy-in fields are only editable in 'none'.
- * Cash-ins/Cash-outs/End need a game to exist. Game Sessions is always
- * enabled.
+ * Cash-ins/Cash-outs need a game to exist; End additionally needs every
+ * currently-playing player to have entered a cash-out (see
+ * notCashedOutPlayers / the badge+popup on the End button, and
+ * lib/pokerActions.ts's `cashedOut` flag for how "entered" is told apart
+ * from "still the default 0"). Game Sessions is always enabled.
  *
  * Players/Group+/Cash-ins/Cash-outs/Game Sessions all need a live sheet
  * read, so in mock mode (components/dev/StaticPreview.tsx) they show a
@@ -41,7 +44,7 @@ import SelectTile from './ui/SelectTile';
 import TextField from './ui/TextField';
 import TrashIcon from './ui/TrashIcon';
 import { displayName } from '../lib/displayName';
-import { PokerLedgerService, type CurrentGameInfo, type GroupInfo, type Player, type TableInfoData } from '../lib/pokerActions';
+import { PokerLedgerService, type CurrentGameInfo, type GroupInfo, type Player, type SumCheckInfo, type TableInfoData } from '../lib/pokerActions';
 import { useTheme } from '../theme/ThemeProvider';
 import type { Theme } from '../theme/tokens';
 
@@ -96,6 +99,15 @@ function deriveGameState(tableInfo: TableInfoData | null): GameState {
 
 const notInPreview = (what: string) => Alert.alert(what, "Not part of the static preview — see the real flow once the backend is fixed.");
 
+// sum-check!D — buy-ins money in minus cash-outs money out for the
+// game, so far. 0 has no sign; a real deviation always does, since the
+// badge otherwise reads ambiguous ("140" doesn't say which direction).
+const formatDeviation = (deviation: number) => {
+  const rounded = Math.round(deviation);
+  if (rounded === 0) return '0';
+  return rounded > 0 ? `+${rounded}` : `${rounded}`;
+};
+
 export default function TableHome({ spreadsheetId, userId = '', getAccessToken, mock }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -103,6 +115,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
 
   const [tableInfo, setTableInfo] = useState<TableInfoData | null>(null);
   const [gameInfo, setGameInfo] = useState<CurrentGameInfo | null>(null);
+  const [sumCheck, setSumCheck] = useState<SumCheckInfo | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [groups, setGroups] = useState<GroupInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +137,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
   const [showCashInScreen, setShowCashInScreen] = useState(false);
   const [showCashOutScreen, setShowCashOutScreen] = useState(false);
   const [showGameSessions, setShowGameSessions] = useState(false);
+  const [showNotCashedOutPopup, setShowNotCashedOutPopup] = useState(false);
 
   // null = not yet selected (Start stays disabled); set by All+/Group+
   // locally — nothing is written to the sheet until Start commits it.
@@ -153,6 +167,10 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
     if (mock) {
       setTableInfo(mock.tableInfo);
       setGameInfo(mock.gameInfo);
+      // Not part of the lightweight mock model — the deviation badge
+      // just stays hidden in static preview (sum-check is a separate
+      // sheet tab, unrelated to gameInfo/tableInfo).
+      setSumCheck(null);
       setPlayers(mock.players);
       setGroups(mock.groups);
       setError(null);
@@ -161,14 +179,16 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
     }
     try {
       const accessToken = await getAccessToken();
-      const [info, game, roster, groupList] = await Promise.all([
+      const [info, game, sums, roster, groupList] = await Promise.all([
         service.getTableInfo(accessToken),
         service.getCurrentGameInfo(accessToken),
+        service.getSumCheck(accessToken),
         service.listPlayers(accessToken),
         service.listGroups(accessToken),
       ]);
       setTableInfo(info);
       setGameInfo(game);
+      setSumCheck(sums);
       setPlayers(roster);
       setGroups(groupList);
       setError(null);
@@ -188,6 +208,10 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
   // ("last played") one, even though gameInfo still points at that
   // same row until a new game overwrites it.
   const playingPlayers = gameState === 'in_progress' ? (gameInfo?.players ?? []).filter((p) => p.buyIns > 0) : [];
+  // Players still owed a cash-out entry — End stays blocked until this
+  // is empty (see endEnabled below); the badge on End and its popup
+  // both read straight from this same list.
+  const notCashedOutPlayers = playingPlayers.filter((p) => !p.cashedOut);
 
   const startEnabled =
     gameState === 'none' &&
@@ -199,7 +223,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
   const groupPlusEnabled = gameState === 'none';
   const cashInsEnabled = gameState === 'empty' || gameState === 'in_progress';
   const cashOutsEnabled = gameState === 'in_progress';
-  const endEnabled = gameState === 'in_progress';
+  const endEnabled = gameState === 'in_progress' && notCashedOutPlayers.length === 0;
 
   const applyMultiplier = (text: string, setText: (v: string) => void, factor: number) => {
     const current = Number(text) || 0;
@@ -259,7 +283,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
         date: new Date().toISOString().slice(0, 10),
         ratio: chips > 0 ? buyInAmount / chips : 0,
         buyInAmount,
-        players: players.map((p) => ({ name: p.name, alias: p.alias, buyIns: selected.has(p.name) ? 1 : 0, finalChips: 0 })),
+        players: players.map((p) => ({ name: p.name, alias: p.alias, buyIns: selected.has(p.name) ? 1 : 0, finalChips: 0, cashedOut: false })),
       });
       setBuyInConfirmed(false);
       setSelectedPlayers(null);
@@ -590,15 +614,36 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
           onPress={() => (mock ? notInPreview('Game Sessions') : setShowGameSessions(true))}>
           <Text style={styles.gridTextC}>🏆 Game Sessions</Text>
         </Pressable>
-        <DoubleTapButton
-          label="🏁 End"
-          armedLabel="Tap again to end"
-          disabled={!endEnabled}
-          variant="danger"
-          onConfirm={handleEnd}
-          radius={theme.radius.sm}
-          style={[styles.gridBtnC, styles.endSizeC]}
-        />
+        <View style={[styles.gridBtnC, styles.endWrap]}>
+          <DoubleTapButton
+            label=""
+            armedLabel="Tap again to end"
+            disabled={!endEnabled}
+            variant="danger"
+            onConfirm={handleEnd}
+            radius={theme.radius.sm}
+            style={styles.endSizeC}
+          />
+          {/* Count of playing players who haven't entered a cash-out yet
+              — End stays disabled (see endEnabled) until this reaches 0.
+              Only meaningful while a game's actually in progress. */}
+          {gameState === 'in_progress' && (
+            <Pressable
+              style={({ pressed }) => [styles.notCashedOutBadge, pressed && styles.pressedDimSurface]}
+              onPress={() => setShowNotCashedOutPopup(true)}>
+              <Text style={styles.notCashedOutBadgeText}>{notCashedOutPlayers.length}</Text>
+            </Pressable>
+          )}
+          {/* sum-check's deviation for this game — buy-ins money in minus
+              cash-outs money out, so far. Stays visible after End too
+              (gameInfo persists past "last played"), hidden only for a
+              table that's never had a game. */}
+          {gameInfo && sumCheck && (
+            <View style={styles.deviationBadge}>
+              <Text style={styles.deviationBadgeText}>{formatDeviation(sumCheck.deviation)}</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* The whole bar opens the current-session info popup — not just a
@@ -685,6 +730,21 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
           </Text>
         ))}
         <Button label="Close" onPress={() => setShowPlayingModal(false)} />
+      </ModalCard>
+
+      {/* Haven't-cashed-out popup — triggered by End's top-right badge */}
+      <ModalCard visible={showNotCashedOutPopup} onRequestClose={() => setShowNotCashedOutPopup(false)}>
+        <Text style={styles.modalTitle}>Haven't cashed out</Text>
+        {notCashedOutPlayers.length === 0 ? (
+          <Text style={styles.modalLine}>Everyone's cashed out — End is ready.</Text>
+        ) : (
+          notCashedOutPlayers.map((p) => (
+            <Text key={p.name} style={styles.modalLine}>
+              {displayName(p, useAlias)}
+            </Text>
+          ))
+        )}
+        <Button label="Close" onPress={() => setShowNotCashedOutPopup(false)} />
       </ModalCard>
 
       {/* Selected players preview — set locally by All+/Group+, not yet
@@ -931,6 +991,43 @@ const createStyles = (theme: Theme) =>
     // carries fixed padding; stacking another one on the outer box on
     // top of it is what made End's double border look overly spaced.
     endSizeC: { minHeight: 38 },
+    // Wraps End's DoubleTapButton so its two corner badges (not-cashed-out
+    // count, sum-check deviation) can be absolutely positioned against a
+    // fixed-size box — DoubleTapButton itself carries gridBtnC's old
+    // `width: '48%'` only indirectly now, via stretching to fill this.
+    endWrap: { position: 'relative' },
+    notCashedOutBadge: {
+      position: 'absolute',
+      top: -6,
+      right: -6,
+      minWidth: 22,
+      height: 22,
+      paddingHorizontal: 5,
+      borderRadius: 11,
+      backgroundColor: theme.colors.danger,
+      borderWidth: 1.5,
+      borderColor: theme.colors.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 3,
+    },
+    notCashedOutBadgeText: { color: '#fff', fontSize: 11, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
+    deviationBadge: {
+      position: 'absolute',
+      bottom: -6,
+      right: -6,
+      minWidth: 22,
+      height: 22,
+      paddingHorizontal: 5,
+      borderRadius: 11,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1.5,
+      borderColor: theme.colors.borderStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 3,
+    },
+    deviationBadgeText: { color: theme.colors.textPrimary, fontSize: 11, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
     gridDisabled: { borderColor: theme.colors.border },
     gridBtnContentRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     gridTextA: { color: theme.colors.accent, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, fontSize: theme.font.size.xl },

@@ -466,11 +466,19 @@ export class PokerLedgerService {
 
     const players = roster.map((player, i) => {
       const startCol = SESSION_LOG_FIRST_PLAYER_COL + i * SESSION_LOG_COLS_PER_PLAYER;
+      // Final chips is a plain number cell with no separate "entered"
+      // flag, so 0 is ambiguous — the default for a cell nothing has
+      // ever written, and also a legitimate cash-out (busted out with
+      // no chips left). Distinguish by the *raw* cell string: blank
+      // means never entered, "0" means entered-as-zero, both parse to
+      // the number 0 either way.
+      const finalChipsRaw = cells[startCol + 1] ?? '';
       return {
         name: player.name,
         alias: player.alias,
         buyIns: Number(cells[startCol]) || 0,
-        finalChips: Number(cells[startCol + 1]) || 0,
+        finalChips: Number(finalChipsRaw) || 0,
+        cashedOut: finalChipsRaw.trim() !== '',
       };
     });
 
@@ -480,6 +488,22 @@ export class PokerLedgerService {
       ratio: Number(cells[1]) || 0,
       buyInAmount: Number(cells[2]) || 0,
       players,
+    };
+  }
+
+  /** Reads sum-check's row for the current/last game (same row number as session-log, kept 1:1 aligned by construction — see pokerLedgerSeed.ts). null if no game has ever started. */
+  async getSumCheck(accessToken: string): Promise<SumCheckInfo | null> {
+    const tableInfo = await this.getTableInfo(accessToken);
+    if (tableInfo.sessionRow === null) return null;
+    const row = tableInfo.sessionRow;
+
+    const rowValues = await this.readRange(TABS.sumCheck, `A${row}:D${row}`, accessToken);
+    const cells = rowValues[0] ?? [];
+    return {
+      row,
+      buyIns: Number(cells[1]) || 0,
+      cashOuts: Number(cells[2]) || 0,
+      deviation: Number(cells[3]) || 0,
     };
   }
 
@@ -515,7 +539,14 @@ export class PokerLedgerService {
         buyInAmount: Number(cells[2]) || 0,
         players: roster.map((player, pi) => {
           const startCol = SESSION_LOG_FIRST_PLAYER_COL + pi * SESSION_LOG_COLS_PER_PLAYER;
-          return { name: player.name, alias: player.alias, buyIns: Number(cells[startCol]) || 0, finalChips: Number(cells[startCol + 1]) || 0 };
+          const finalChipsRaw = cells[startCol + 1] ?? '';
+          return {
+            name: player.name,
+            alias: player.alias,
+            buyIns: Number(cells[startCol]) || 0,
+            finalChips: Number(finalChipsRaw) || 0,
+            cashedOut: finalChipsRaw.trim() !== '',
+          };
         }),
       }))
       .filter((s) => s.date.trim() !== '')
@@ -666,8 +697,10 @@ export type CurrentGameInfo = {
   date: string;
   ratio: number;
   buyInAmount: number;
-  players: Array<{ name: string; alias: string; buyIns: number; finalChips: number }>;
+  players: Array<{ name: string; alias: string; buyIns: number; finalChips: number; cashedOut: boolean }>;
 };
+
+export type SumCheckInfo = { row: number; buyIns: number; cashOuts: number; deviation: number };
 
 /**
  * A player's net result for one session: cash-out value minus buy-in
