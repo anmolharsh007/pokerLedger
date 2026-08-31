@@ -6,8 +6,13 @@
  * (Felt & Gold), read off each theme's own `isDark` flag rather than
  * hardcoding which name is which. The diamond is the outline glyph (♢,
  * not the solid ♦) so an unselected segment doesn't read as already
- * filled in with that theme's own accent. The active segment fills with
- * that theme's own accent so the control previews the swap before you tap it.
+ * filled in with that theme's own accent — colored red (the ambient
+ * theme's own danger token, not optionTheme's) while unselected, the
+ * traditional diamond-suit color, same way the spade stays the ambient
+ * theme's neutral textSecondary. The active segment fills with that
+ * theme's own accent so the control previews the swap before you tap it
+ * — its icon switches to accentText for contrast against that fill
+ * rather than staying red/grey.
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -25,6 +30,10 @@ export default function ThemeToggle() {
       {OPTIONS.map((name) => {
         const active = name === themeName;
         const optionTheme = themes[name];
+        // Diamond reads red (traditional suit color) while unselected;
+        // spade stays the ambient theme's neutral. Both switch to
+        // accentText once active, for contrast against the accent fill.
+        const inactiveColor = optionTheme.isDark ? theme.colors.textSecondary : theme.colors.danger;
         return (
           <Pressable
             key={name}
@@ -35,7 +44,7 @@ export default function ThemeToggle() {
               { borderRadius: theme.radius.pill },
               active && { backgroundColor: optionTheme.colors.accent },
             ]}>
-            <Text style={[styles.icon, { color: active ? optionTheme.colors.accentText : theme.colors.textSecondary }]}>
+            <Text style={[styles.icon, { color: active ? optionTheme.colors.accentText : inactiveColor }]}>
               {optionTheme.isDark ? '♠' : '♢'}
             </Text>
           </Pressable>
