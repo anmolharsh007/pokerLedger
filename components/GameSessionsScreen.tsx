@@ -1,9 +1,18 @@
 /**
- * Game Sessions — every past game at this table, players down the rows,
- * one column per game, newest game leftmost. Cell values are each
- * player's net result for that game (lib/pokerActions.ts#sessionNet):
- * cash-out value minus buy-in cost. A player who sat a game out (no
- * buy-ins, no chips recorded) shows a dash instead of ₹0.
+ * Game Sessions — every *completed* past game at this table, players
+ * down the rows, one column per game, newest game leftmost. Cell values
+ * are each player's net result for that game
+ * (lib/pokerActions.ts#sessionNet): cash-out value minus buy-in cost. A
+ * player who sat a game out (no buy-ins, no chips recorded) shows a
+ * dash instead of ₹0.
+ *
+ * "Completed" (listSessions' own filter, not this screen's) means every
+ * player who bought in has a cash-out entered — an in-progress or
+ * abandoned game is skipped rather than shown as a finished result.
+ * Because that filtering can shrink a row-window's yield unpredictably,
+ * pagination here follows listSessions' own `nextBefore` cursor rather
+ * than assuming a page always holds PAGE_SIZE sessions or that the last
+ * *returned* session's row is where the next scan should resume.
  *
  * Read-only — no writes happen here. Loads a page of the most recent
  * PAGE_SIZE games up front (lib/pokerActions.ts#listSessions) rather
@@ -61,6 +70,11 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
 
   const [sessions, setSessions] = useState<CurrentGameInfo[]>([]);
   const [hasMore, setHasMore] = useState(false);
+  // Where the next page's scan should resume from — listSessions' own
+  // cursor, not derived from the last *returned* session's row (a page
+  // can legitimately return fewer than PAGE_SIZE, even zero, once
+  // in-progress/abandoned games are filtered out).
+  const [nextBefore, setNextBefore] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +87,7 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
       const result = await service.listSessions(accessToken, PAGE_SIZE);
       setSessions(result.sessions);
       setHasMore(result.hasMore);
+      setNextBefore(result.nextBefore);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -85,20 +100,20 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
   }, [load]);
 
   const loadMore = useCallback(async () => {
-    if (!hasMore || loadingMore || sessions.length === 0) return;
+    if (!hasMore || loadingMore || nextBefore === null) return;
     setLoadingMore(true);
     try {
       const accessToken = await getAccessToken();
-      const oldestRow = sessions[sessions.length - 1].row;
-      const result = await service.listSessions(accessToken, PAGE_SIZE, oldestRow);
+      const result = await service.listSessions(accessToken, PAGE_SIZE, nextBefore);
       setSessions((prev) => [...prev, ...result.sessions]);
       setHasMore(result.hasMore);
+      setNextBefore(result.nextBefore);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoadingMore(false);
     }
-  }, [hasMore, loadingMore, sessions, getAccessToken, service]);
+  }, [hasMore, loadingMore, nextBefore, getAccessToken, service]);
 
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {

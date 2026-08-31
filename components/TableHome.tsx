@@ -559,19 +559,6 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
         </View>
       </View>
 
-      <View style={styles.startRow}>
-        <View style={styles.setupBtn}>
-          <DoubleTapButton
-            label={gameState === 'none' ? 'Set players' : 'Add players'}
-            armedLabel={gameState === 'none' ? 'Tap again to set players' : 'Tap again to add players'}
-            disabled={!startEnabled}
-            onConfirm={handleStart}
-            style={styles.setupBtnHeight}
-          />
-          <Text style={styles.ordinalBadge}>II</Text>
-        </View>
-      </View>
-
       {/* Size A — the pre-game setup actions, most prominent. */}
       <View style={styles.grid}>
         <Pressable
@@ -640,7 +627,7 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
               table that's never had a game. */}
           {gameInfo && sumCheck && (
             <View style={styles.deviationBadge}>
-              <Text style={styles.deviationBadgeText}>{formatDeviation(sumCheck.deviation)}</Text>
+              <Text style={styles.deviationBadgeText}>💰 {formatDeviation(sumCheck.deviation)}</Text>
             </View>
           )}
         </View>
@@ -673,9 +660,10 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
         )}
       </Pressable>
 
-      {/* Selected-players preview (▶) and clear (trash icon) — moved
-          down to sit right under the status bar instead of crowding the
-          "Set players" row up top. */}
+      {/* Selected-players preview (▶) and clear (trash icon) — sits right
+          under the status bar, ahead of "Set players"/"Add players"
+          itself (now the final action, moved to the bottom of the
+          screen) so the preview is visible before that button. */}
       {selectedPlayers !== null && (
         <View style={styles.selectedActionsRow}>
           <IconButton icon="▶" variant="accent" size={40} onPress={handleOpenSelectedPopup} />
@@ -702,6 +690,22 @@ export default function TableHome({ spreadsheetId, userId = '', getAccessToken, 
           <Text style={styles.playingBtnChevron}>›</Text>
         </Pressable>
       )}
+
+      {/* Moved to the bottom of the screen — the final action once
+          everything above (buy-in, usual, All+/Group+ selection) has
+          been reviewed, rather than sitting right under "Set game". */}
+      <View style={styles.startRow}>
+        <View style={styles.setupBtn}>
+          <DoubleTapButton
+            label={gameState === 'none' ? 'Set players' : 'Add players'}
+            armedLabel={gameState === 'none' ? 'Tap again to set players' : 'Tap again to add players'}
+            disabled={!startEnabled}
+            onConfirm={handleStart}
+            style={styles.setupBtnHeight}
+          />
+          <Text style={styles.ordinalBadge}>II</Text>
+        </View>
+      </View>
 
       {/* Current session info popup */}
       <ModalCard visible={showInfo} onRequestClose={() => setShowInfo(false)}>
@@ -884,7 +888,10 @@ const createStyles = (theme: Theme) =>
     // 12% — still overflowing the button's own edges (emoji included)
     // at the first reduction.
     usualBtnLabel: { fontSize: theme.font.size.md * 1.25 * 0.88 * 0.88 },
-    // "I"/"II" — Set game and Set players are a fixed two-step sequence.
+    // "I"/"II" — Set game and Set players are a fixed two-step sequence,
+    // even though "Set players" itself now renders at the bottom of the
+    // screen rather than right below "Set game" — the badges are the
+    // only thing left spelling out the order between them.
     // A small badge sitting fully inside the button's own bottom-right
     // corner (not overlapping past its edge) spells that out, faded
     // translucent grey so it reads as a subtle sequence marker, not
@@ -928,9 +935,11 @@ const createStyles = (theme: Theme) =>
       borderWidth: 1.5,
       borderColor: theme.colors.accent,
     },
+    // "Set players"/"Add players" itself lives at the bottom of the
+    // screen now (see the render site's own comment) — this style just
+    // sizes/positions the row wherever it's rendered.
     startRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    // ▶ (selected-players preview) and 🗑 (clear) — now sit below the
-    // status bar rather than crowding the "Set players" row.
+    // ▶ (selected-players preview) and 🗑 (clear) — sit below the status bar.
     selectedActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     // Icon-only (TrashIcon, no "Clear" label) — a circle matching the ▶
     // button beside it, tinted danger since it's a destructive action.
@@ -1012,14 +1021,17 @@ const createStyles = (theme: Theme) =>
       zIndex: 3,
     },
     notCashedOutBadgeText: { color: '#fff', fontSize: 11, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
+    // A pill, not a circle like notCashedOutBadge — "💰 +140" needs more
+    // room than a bare count does, and a fixed 22×22 box would either
+    // clip it or force a tiny illegible font.
     deviationBadge: {
       position: 'absolute',
       bottom: -6,
       right: -6,
-      minWidth: 22,
-      height: 22,
-      paddingHorizontal: 5,
-      borderRadius: 11,
+      minHeight: 22,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: theme.radius.pill,
       backgroundColor: theme.colors.surfaceAlt,
       borderWidth: 1.5,
       borderColor: theme.colors.borderStrong,

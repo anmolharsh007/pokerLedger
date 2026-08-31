@@ -513,46 +513,62 @@ export class PokerLedgerService {
    * instead of reading the whole log at once. Sessions are always
    * appended sequentially (addSession/startGame both use
    * findNextEmptyRow), so there's never a gap between
-   * SESSION_DATA_FIRST_ROW and the last used row — a page is just a
-   * contiguous row-number window, no need to scan past it.
+   * SESSION_DATA_FIRST_ROW and the last used row.
    *
-   * `before`: exclusive upper row bound. Omit for the most recent page;
-   * pass the previous page's oldest session's `row` to page further back.
+   * Only *completed* games are returned — every player who bought in
+   * has cashed out (same condition TableHome's End button gates on).
+   * An in-progress or abandoned game (someone never got a cash-out
+   * entered) is skipped rather than shown as a finished result. Since
+   * that means a single row-window doesn't necessarily yield `limit`
+   * sessions, this scans window-by-window, walking further back, until
+   * either enough are found or the log runs out.
+   *
+   * `before`: exclusive upper row bound to resume scanning from — pass
+   * the previous call's `nextBefore` to page further back. Omit for the
+   * most recent page.
    */
-  async listSessions(accessToken: string, limit: number, before?: number): Promise<{ sessions: CurrentGameInfo[]; hasMore: boolean }> {
+  async listSessions(accessToken: string, limit: number, before?: number): Promise<{ sessions: CurrentGameInfo[]; hasMore: boolean; nextBefore: number }> {
     const roster = await this.listPlayers(accessToken);
     const lastCol =
       roster.length > 0
         ? PokerLedgerService.colToLetter(SESSION_LOG_FIRST_PLAYER_COL + roster.length * SESSION_LOG_COLS_PER_PLAYER - 1)
         : 'C';
 
-    const endRowExclusive = before ?? (await this.findNextEmptyRow(TABS.sessionLog, 'A', SESSION_DATA_FIRST_ROW, accessToken));
-    const startRow = Math.max(SESSION_DATA_FIRST_ROW, endRowExclusive - limit);
-    if (startRow >= endRowExclusive) return { sessions: [], hasMore: false };
+    let endRowExclusive = before ?? (await this.findNextEmptyRow(TABS.sessionLog, 'A', SESSION_DATA_FIRST_ROW, accessToken));
+    const collected: CurrentGameInfo[] = [];
 
-    const rows = await this.readRange(TABS.sessionLog, `A${startRow}:${lastCol}${endRowExclusive - 1}`, accessToken);
-    const sessions: CurrentGameInfo[] = rows
-      .map((cells, i) => ({
-        row: startRow + i,
-        date: cells[0] ?? '',
-        ratio: Number(cells[1]) || 0,
-        buyInAmount: Number(cells[2]) || 0,
-        players: roster.map((player, pi) => {
-          const startCol = SESSION_LOG_FIRST_PLAYER_COL + pi * SESSION_LOG_COLS_PER_PLAYER;
-          const finalChipsRaw = cells[startCol + 1] ?? '';
-          return {
-            name: player.name,
-            alias: player.alias,
-            buyIns: Number(cells[startCol]) || 0,
-            finalChips: Number(finalChipsRaw) || 0,
-            cashedOut: finalChipsRaw.trim() !== '',
-          };
-        }),
-      }))
-      .filter((s) => s.date.trim() !== '')
-      .reverse(); // newest-first within this page
+    while (collected.length < limit && endRowExclusive > SESSION_DATA_FIRST_ROW) {
+      const startRow = Math.max(SESSION_DATA_FIRST_ROW, endRowExclusive - limit);
+      const rows = await this.readRange(TABS.sessionLog, `A${startRow}:${lastCol}${endRowExclusive - 1}`, accessToken);
+      const batch: CurrentGameInfo[] = rows
+        .map((cells, i) => {
+          const players = roster.map((player, pi) => {
+            const startCol = SESSION_LOG_FIRST_PLAYER_COL + pi * SESSION_LOG_COLS_PER_PLAYER;
+            const finalChipsRaw = cells[startCol + 1] ?? '';
+            return {
+              name: player.name,
+              alias: player.alias,
+              buyIns: Number(cells[startCol]) || 0,
+              finalChips: Number(finalChipsRaw) || 0,
+              cashedOut: finalChipsRaw.trim() !== '',
+            };
+          });
+          return { row: startRow + i, date: cells[0] ?? '', ratio: Number(cells[1]) || 0, buyInAmount: Number(cells[2]) || 0, players };
+        })
+        .filter((s) => s.date.trim() !== '' && s.players.every((p) => p.buyIns === 0 || p.cashedOut))
+        .reverse(); // newest-first within this window
+      collected.push(...batch);
+      endRowExclusive = startRow;
+    }
 
-    return { sessions, hasMore: startRow > SESSION_DATA_FIRST_ROW };
+    const sessions = collected.slice(0, limit);
+    // More exists if this scan already found extra completed sessions
+    // beyond what's being returned (discarded here, re-found by the next
+    // call's `before`), or if there's still unscanned row range left.
+    const hasMore = collected.length > limit || endRowExclusive > SESSION_DATA_FIRST_ROW;
+    const nextBefore = sessions.length > 0 ? sessions[sessions.length - 1].row : endRowExclusive;
+
+    return { sessions, hasMore, nextBefore };
   }
 
   /**
