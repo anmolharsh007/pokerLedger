@@ -33,7 +33,9 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View, type NativeScrol
 
 import Button from './ui/Button';
 import IconButton from './ui/IconButton';
+import LeaderboardScreen from './LeaderboardScreen';
 import { displayName } from '../lib/displayName';
+import { formatNet } from '../lib/formatNet';
 import { getValues } from '../lib/googleSheetsApi';
 import { TABS } from '../lib/pokerLedgerSeed';
 import { PokerLedgerService, sessionNet, type CurrentGameInfo, type Player } from '../lib/pokerActions';
@@ -64,12 +66,6 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function formatNet(net: number): string {
-  const rounded = Math.round(net);
-  if (rounded === 0) return '₹0';
-  return `${rounded > 0 ? '+' : '-'}₹${Math.abs(rounded)}`;
-}
-
 export default function GameSessionsScreen({ players, spreadsheetId, getAccessToken, useAlias, onBack }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -86,6 +82,7 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -144,6 +141,21 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
   );
 
   const tableHeight = ROW_HEIGHT * (players.length + 1);
+
+  // Same early-return screen-swap TableHome.tsx uses for its own child
+  // screens (GameSessionsScreen included) — simpler than threading a
+  // "which screen" enum through this component's own render tree.
+  if (showLeaderboard) {
+    return (
+      <LeaderboardScreen
+        players={players}
+        spreadsheetId={spreadsheetId}
+        getAccessToken={getAccessToken}
+        useAlias={useAlias}
+        onBack={() => setShowLeaderboard(false)}
+      />
+    );
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -228,7 +240,10 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
         </View>
       )}
 
-      <Button label="Table screen" variant="secondary" onPress={onBack} />
+      <View style={styles.footerActions}>
+        <Button label="🏆 Leaderboard" variant="secondary" onPress={() => setShowLeaderboard(true)} style={styles.flexBtn} />
+        <Button label="Table screen" variant="secondary" onPress={onBack} style={styles.flexBtn} />
+      </View>
     </ScrollView>
   );
 }
@@ -262,4 +277,6 @@ const createStyles = (theme: Theme) =>
     positive: { color: theme.colors.success },
     negative: { color: theme.colors.danger },
     loadingCol: { width: GAME_COL_WIDTH, alignItems: 'center', justifyContent: 'center' },
+    footerActions: { flexDirection: 'row', gap: 10 },
+    flexBtn: { flex: 1 },
   });
