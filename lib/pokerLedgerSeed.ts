@@ -35,7 +35,17 @@
  * the value-only writes that engine knows how to express. This
  * project has its own screens instead (see App.tsx, lib/pokerActions.ts).
  */
-import type { SheetSeed } from './appSheet';
+import type { RGBColor, SheetSeed } from './appSheet';
+
+// Header color, reused wherever a header cell is written or grown —
+// the seed below (initial header rows) and pokerActions.ts#addPlayer
+// (session-log's per-player header columns, appended after creation so
+// they fall outside the seed's own header block). Matches the app's
+// own felt-theme gold accent / textInverse (theme/tokens.ts) so a table
+// opened directly in Sheets still reads as "this app's" — Sheets colors
+// are 0..1 floats, not the 0-255/hex the app's own UI uses.
+export const HEADER_BACKGROUND_COLOR: RGBColor = { red: 0.847, green: 0.659, blue: 0.251 }; // #d8a840
+export const HEADER_TEXT_COLOR: RGBColor = { red: 0.109, green: 0.071, blue: 0.024 }; // #1c1206
 
 // The app's Drive folder name (lib/appSheet.ts#createAppSheet's
 // `appName`) — deliberately the real display name now, not a
@@ -64,6 +74,22 @@ export const pokerLedgerSeed: SheetSeed = {
     { range: `${TABS.tableInfo}!A1:A3`, values: [['title'], ['Usual buy-in (₹)'], ['Usual buy-in (chips)']] },
     { range: `${TABS.tableInfo}!A6:B6`, values: [['use alias', 'false']] },
   ],
+  // Only tabs with an already-defined header shape (see the layout
+  // notes above) — groups-info/leaderboard have none yet, and
+  // TableInfo is a label/value column, not a header row. session-log's
+  // block is just its 3 static columns (Date/ratio/Buy-in); each
+  // player's own 2-column block is formatted separately as it's added,
+  // by pokerActions.ts#addPlayer, reusing the same colors below.
+  headerFormat: {
+    backgroundColor: HEADER_BACKGROUND_COLOR,
+    textColor: HEADER_TEXT_COLOR,
+    ranges: {
+      [TABS.playersInfo]: { rowCount: 1, colCount: 3 },
+      [TABS.netResults]: { rowCount: 1, colCount: 2 },
+      [TABS.sessionLog]: { rowCount: 1, colCount: 3 },
+      [TABS.sumCheck]: { rowCount: 1, colCount: 4 },
+    },
+  },
   // The Drive file itself is named Table<ID>.xlsx (an internal
   // identifier, not the human name — see App.tsx#handleCreateTable).
   // The registry/Firestore `name` is normally already the human title

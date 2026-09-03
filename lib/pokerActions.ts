@@ -16,9 +16,10 @@
  * yet unified with) pokerTypes.ts's richer Player struct, which is
  * for the not-yet-built live-game flow (Table.currentGame etc).
  */
+import { headerFormatRequest } from './appSheet';
 import { batchUpdateSpreadsheet, batchUpdateValues, getSpreadsheetMeta, getValues } from './googleSheetsApi';
 import { SheetData, type ValueV } from './pokerTypes';
-import { TABS } from './pokerLedgerSeed';
+import { HEADER_BACKGROUND_COLOR, HEADER_TEXT_COLOR, TABS } from './pokerLedgerSeed';
 
 const SESSION_LOG_FIRST_PLAYER_COL = 3; // 0-indexed: column D (A=0, B=1, C=2)
 const SESSION_LOG_COLS_PER_PLAYER = 2;
@@ -167,6 +168,15 @@ export class PokerLedgerService {
             mergeType: 'MERGE_ALL',
           },
         },
+        // Same header color as the seed's own static columns
+        // (pokerLedgerSeed.ts#headerFormat) — this player's 2-column
+        // block falls outside that seed-time formatting since it's
+        // appended after creation, so it needs its own request to stay
+        // visually consistent. Both header rows (merged name + the
+        // Buy-ins(#)/Final chips sub-headers below it).
+        headerFormatRequest(sessionLogSheetId, 2, endCol - startCol, HEADER_BACKGROUND_COLOR, HEADER_TEXT_COLOR, {
+          startColumnIndex: startCol,
+        }),
       ],
       accessToken
     );
