@@ -35,17 +35,37 @@
  * the value-only writes that engine knows how to express. This
  * project has its own screens instead (see App.tsx, lib/pokerActions.ts).
  */
-import type { RGBColor, SheetSeed } from './appSheet';
+import type { HeaderStyle, SheetSeed } from './appSheet';
 
-// Header color, reused wherever a header cell is written or grown —
-// the seed below (initial header rows) and pokerActions.ts#addPlayer
-// (session-log's per-player header columns, appended after creation so
-// they fall outside the seed's own header block). Matches the app's
-// own felt-theme gold accent / textInverse (theme/tokens.ts) so a table
-// opened directly in Sheets still reads as "this app's" — Sheets colors
-// are 0..1 floats, not the 0-255/hex the app's own UI uses.
-export const HEADER_BACKGROUND_COLOR: RGBColor = { red: 0.847, green: 0.659, blue: 0.251 }; // #d8a840
-export const HEADER_TEXT_COLOR: RGBColor = { red: 0.109, green: 0.071, blue: 0.024 }; // #1c1206
+// Header styling, matched cell-for-cell against a reference sheet
+// (docs.google.com/spreadsheets/d/1Snr_q5jBezRTkRHV21KA3tMQYknkupE4JnQcL90R9r4)
+// built by hand for this same layout — pulled its xlsx export and read
+// styles.xml rather than eyeballing it. Reused wherever a header cell
+// is written or grown: the seed below (initial header rows) and
+// pokerActions.ts#addPlayer (session-log's per-player header columns,
+// appended after creation so they fall outside the seed's own header
+// block, hence PLAYER_HEADER_STYLE below). White bold Arial on a
+// medium-blue fill for every "real" header row; the reference reserves
+// a second, orange tone for session-log's repeating per-player block
+// (its row-3/4 headers, style s="13" in the sheet's styles.xml) to set
+// it apart from the sheet's fixed columns — carried over here as
+// PLAYER_HEADER_STYLE for the same reason. Sheets colors are 0..1
+// floats, not the 0-255/hex a swatch picker gives you.
+const HEADER_BORDER_COLOR = { red: 0.749, green: 0.749, blue: 0.749 }; // #BFBFBF, thin border on every header cell in the reference
+
+export const HEADER_STYLE: HeaderStyle = {
+  backgroundColor: { red: 0.180, green: 0.459, blue: 0.714 }, // #2E75B6
+  textColor: { red: 1, green: 1, blue: 1 }, // #FFFFFF
+  borderColor: HEADER_BORDER_COLOR,
+  fontFamily: 'Arial',
+};
+
+export const PLAYER_HEADER_STYLE: HeaderStyle = {
+  backgroundColor: { red: 0.773, green: 0.353, blue: 0.067 }, // #C55A11
+  textColor: { red: 1, green: 1, blue: 1 }, // #FFFFFF
+  borderColor: HEADER_BORDER_COLOR,
+  fontFamily: 'Arial',
+};
 
 // The app's Drive folder name (lib/appSheet.ts#createAppSheet's
 // `appName`) — deliberately the real display name now, not a
@@ -81,8 +101,7 @@ export const pokerLedgerSeed: SheetSeed = {
   // player's own 2-column block is formatted separately as it's added,
   // by pokerActions.ts#addPlayer, reusing the same colors below.
   headerFormat: {
-    backgroundColor: HEADER_BACKGROUND_COLOR,
-    textColor: HEADER_TEXT_COLOR,
+    style: HEADER_STYLE,
     ranges: {
       [TABS.playersInfo]: { rowCount: 1, colCount: 3 },
       [TABS.netResults]: { rowCount: 1, colCount: 2 },

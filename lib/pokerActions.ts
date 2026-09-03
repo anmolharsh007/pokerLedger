@@ -19,7 +19,7 @@
 import { headerFormatRequest } from './appSheet';
 import { batchUpdateSpreadsheet, batchUpdateValues, getSpreadsheetMeta, getValues } from './googleSheetsApi';
 import { SheetData, type ValueV } from './pokerTypes';
-import { HEADER_BACKGROUND_COLOR, HEADER_TEXT_COLOR, TABS } from './pokerLedgerSeed';
+import { PLAYER_HEADER_STYLE, TABS } from './pokerLedgerSeed';
 
 const SESSION_LOG_FIRST_PLAYER_COL = 3; // 0-indexed: column D (A=0, B=1, C=2)
 const SESSION_LOG_COLS_PER_PLAYER = 2;
@@ -168,13 +168,15 @@ export class PokerLedgerService {
             mergeType: 'MERGE_ALL',
           },
         },
-        // Same header color as the seed's own static columns
-        // (pokerLedgerSeed.ts#headerFormat) — this player's 2-column
-        // block falls outside that seed-time formatting since it's
-        // appended after creation, so it needs its own request to stay
-        // visually consistent. Both header rows (merged name + the
-        // Buy-ins(#)/Final chips sub-headers below it).
-        headerFormatRequest(sessionLogSheetId, 2, endCol - startCol, HEADER_BACKGROUND_COLOR, HEADER_TEXT_COLOR, {
+        // This player's 2-column block falls outside the seed's own
+        // header formatting (pokerLedgerSeed.ts#headerFormat) since
+        // it's appended after creation, so it needs its own request —
+        // both header rows (merged name + the Buy-ins(#)/Final chips
+        // sub-headers below it). PLAYER_HEADER_STYLE, not HEADER_STYLE:
+        // the reference sheet this was matched against uses a distinct
+        // orange tone for session-log's per-player columns, setting
+        // them apart from the sheet's fixed (Date/ratio/Buy-in) ones.
+        headerFormatRequest(sessionLogSheetId, 2, endCol - startCol, PLAYER_HEADER_STYLE, {
           startColumnIndex: startCol,
         }),
       ],
