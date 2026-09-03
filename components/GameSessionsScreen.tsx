@@ -190,7 +190,7 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
           </View>
 
           <View style={styles.netCol}>
-            <View style={styles.headerCell}>
+            <View style={[styles.headerCell, styles.netHeaderCell]}>
               <Text style={styles.headerCellText} numberOfLines={1}>
                 Net
               </Text>
@@ -199,7 +199,7 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
               const total = netTotals?.[p.name] ?? 0;
               return (
                 <View key={p.row} style={styles.valueCell}>
-                  <Text style={[styles.valueCellText, total > 0 ? styles.positive : total < 0 ? styles.negative : undefined]}>
+                  <Text style={[styles.valueCellText, styles.netValueCellText, total > 0 ? styles.positive : total < 0 ? styles.negative : undefined]}>
                     {netTotals ? formatNet(total) : '—'}
                   </Text>
                 </View>
@@ -258,7 +258,12 @@ const createStyles = (theme: Theme) =>
     loadingCenter: { marginVertical: 24 },
     table: { flexDirection: 'row', borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md, overflow: 'hidden' },
     frozenCol: { width: PLAYER_COL_WIDTH, borderRightWidth: 1, borderRightColor: theme.colors.borderStrong },
-    netCol: { width: NET_COL_WIDTH, borderRightWidth: 1, borderRightColor: theme.colors.borderStrong },
+    // Net reads as a pinned "lifetime total" column, not just another
+    // game — gold wash + a solid gold divider (vs. every other
+    // column's plain borderStrong/border) + bold values (netValueCellText).
+    netCol: { width: NET_COL_WIDTH, backgroundColor: theme.colors.accentSoft, borderRightWidth: 2, borderRightColor: theme.colors.accent },
+    netHeaderCell: { backgroundColor: theme.colors.accentSoft },
+    netValueCellText: { fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold },
     gamesRow: { flexDirection: 'row' },
     gameCol: { width: GAME_COL_WIDTH, borderRightWidth: 1, borderRightColor: theme.colors.border },
     headerCell: {
