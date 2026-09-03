@@ -20,9 +20,13 @@
  * columns toward the end fetches the next older page and appends it,
  * same direction the user is scrolling in.
  *
- * The player-name column is frozen (outside the horizontal ScrollView)
- * since it's small and fixed — game columns are the axis that grows
- * without bound as more sessions get played.
+ * The player-name and Net columns are frozen (outside the horizontal
+ * ScrollView) since they're small and fixed — game columns are the axis
+ * that grows without bound as more sessions get played. Net is each
+ * player's lifetime total from the net-results sheet tab (same number
+ * NetResultsScreen shows) rather than a sum of just the loaded game
+ * columns — the latter would silently grow as more columns page in
+ * while scrolling.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
@@ -30,6 +34,8 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View, type NativeScrol
 import Button from './ui/Button';
 import IconButton from './ui/IconButton';
 import { displayName } from '../lib/displayName';
+import { getValues } from '../lib/googleSheetsApi';
+import { TABS } from '../lib/pokerLedgerSeed';
 import { PokerLedgerService, sessionNet, type CurrentGameInfo, type Player } from '../lib/pokerActions';
 import { useTheme } from '../theme/ThemeProvider';
 import type { Theme } from '../theme/tokens';
@@ -37,6 +43,7 @@ import type { Theme } from '../theme/tokens';
 const PAGE_SIZE = 5;
 const ROW_HEIGHT = 44;
 const PLAYER_COL_WIDTH = 110;
+const NET_COL_WIDTH = 84;
 const GAME_COL_WIDTH = 84;
 // How close to the end of the scrollable content (in px) triggers the
 // next page fetch — loads a little before the user actually hits the
@@ -69,6 +76,7 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
   const service = useMemo(() => new PokerLedgerService(spreadsheetId), [spreadsheetId]);
 
   const [sessions, setSessions] = useState<CurrentGameInfo[]>([]);
+  const [netTotals, setNetTotals] = useState<Record<string, number> | null>(null);
   const [hasMore, setHasMore] = useState(false);
   // Where the next page's scan should resume from — listSessions' own
   // cursor, not derived from the last *returned* session's row (a page
@@ -84,16 +92,25 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
     setError(null);
     try {
       const accessToken = await getAccessToken();
-      const result = await service.listSessions(accessToken, PAGE_SIZE);
+      const [result, netRows] = await Promise.all([
+        service.listSessions(accessToken, PAGE_SIZE),
+        getValues(spreadsheetId, `${TABS.netResults}!A2:B200`, accessToken),
+      ]);
       setSessions(result.sessions);
       setHasMore(result.hasMore);
       setNextBefore(result.nextBefore);
+      const totals: Record<string, number> = {};
+      for (const [name, total] of netRows) {
+        if ((name ?? '').trim() === '') continue;
+        totals[name.trim()] = Number(total) || 0;
+      }
+      setNetTotals(totals);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [getAccessToken, service]);
+  }, [getAccessToken, service, spreadsheetId]);
 
   useEffect(() => {
     load();
@@ -160,6 +177,24 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
             ))}
           </View>
 
+          <View style={styles.netCol}>
+            <View style={styles.headerCell}>
+              <Text style={styles.headerCellText} numberOfLines={1}>
+                Net
+              </Text>
+            </View>
+            {players.map((p) => {
+              const total = netTotals?.[p.name] ?? 0;
+              return (
+                <View key={p.row} style={styles.valueCell}>
+                  <Text style={[styles.valueCellText, total > 0 ? styles.positive : total < 0 ? styles.negative : undefined]}>
+                    {netTotals ? formatNet(total) : '—'}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+
           <ScrollView horizontal showsHorizontalScrollIndicator={false} onScroll={handleScroll} scrollEventThrottle={16}>
             <View style={styles.gamesRow}>
               {sessions.map((session) => (
@@ -208,6 +243,7 @@ const createStyles = (theme: Theme) =>
     loadingCenter: { marginVertical: 24 },
     table: { flexDirection: 'row', borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md, overflow: 'hidden' },
     frozenCol: { width: PLAYER_COL_WIDTH, borderRightWidth: 1, borderRightColor: theme.colors.borderStrong },
+    netCol: { width: NET_COL_WIDTH, borderRightWidth: 1, borderRightColor: theme.colors.borderStrong },
     gamesRow: { flexDirection: 'row' },
     gameCol: { width: GAME_COL_WIDTH, borderRightWidth: 1, borderRightColor: theme.colors.border },
     headerCell: {
