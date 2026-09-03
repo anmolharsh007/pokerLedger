@@ -205,6 +205,8 @@ PODS:
     - ExpoModulesCore
   - ExpoCameraBarcodeScanning (57.0.4):
     - ExpoCamera
+  - ExpoClipboard (57.0.1):
+    - ExpoModulesCore
   - ExpoCrypto (57.0.2):
     - ExpoModulesCore
   - ExpoDomWebView (57.0.1):
@@ -2209,6 +2211,7 @@ DEPENDENCIES:
   - ExpoAsset (from `../node_modules/expo/node_modules/expo-asset/ios`)
   - ExpoCamera (from `../node_modules/expo-camera/ios/ExpoCamera.podspec`)
   - ExpoCameraBarcodeScanning (from `../node_modules/expo-camera/ios/ExpoCameraBarcodeScanning.podspec`)
+  - ExpoClipboard (from `../node_modules/expo-clipboard/ios`)
   - ExpoCrypto (from `../node_modules/expo-auth-session/node_modules/expo-crypto/ios`)
   - "ExpoDomWebView (from `../node_modules/@expo/dom-webview/ios`)"
   - ExpoFileSystem (from `../node_modules/expo/node_modules/expo-file-system/ios/ExpoFileSystem.podspec`)
@@ -2342,6 +2345,8 @@ EXTERNAL SOURCES:
     :podspec: "../node_modules/expo-camera/ios/ExpoCamera.podspec"
   ExpoCameraBarcodeScanning:
     :podspec: "../node_modules/expo-camera/ios/ExpoCameraBarcodeScanning.podspec"
+  ExpoClipboard:
+    :path: "../node_modules/expo-clipboard/ios"
   ExpoCrypto:
     :path: "../node_modules/expo-auth-session/node_modules/expo-crypto/ios"
   ExpoDomWebView:
@@ -2544,6 +2549,7 @@ SPEC CHECKSUMS:
   ExpoAsset: ff225ee16cea2409800b20fe4945a7c720a24cee
   ExpoCamera: 00a098da25adbc6013f051b5db47279cb10a716c
   ExpoCameraBarcodeScanning: 14c72e1f522eb69f7a672d757eb294c096756faa
+  ExpoClipboard: 95055b11758f339b61d4d8064dd799df1cf03b7f
   ExpoCrypto: f392e5f076a4c11dbfa1a6046449747acec82711
   ExpoDomWebView: beaec034e51bd028428b98bb1f2633ab79c6d095
   ExpoFileSystem: cc500f33804065aacc7b3366007267b84deca8c8
@@ -2552,7 +2558,7 @@ SPEC CHECKSUMS:
   ExpoLinearGradient: 903b3f5fe566c666ff78b2599add51d094483613
   ExpoLinking: b616f5d0c2e11db3a5cccd8ae6bff45294929fd2
   ExpoLogBox: 80957303325cd4439137765c90a87d7f22aaf2ff
-  ExpoModulesCore: b15dbfdca5bce43befdda2217ef15dacc4c271f1
+  ExpoModulesCore: f0c17a1275422dfd6afc2fe16e0e470571505e8c
   ExpoModulesJSI: 1529d4289b9a3647d8901a27b41f1af173598b45
   ExpoModulesWorklets: 57a11e6ae984c2680e7967b785ded96199caed8c
   ExpoSplashScreen: 6f422fd595600d78520c6b7dcf8a908fb8a7fec0
