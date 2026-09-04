@@ -10,6 +10,7 @@
  * `ghost` is quieter still (a faint border, dimmer text) for the least
  * emphasized action on a screen.
  */
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
 import { useTheme } from '../../theme/ThemeProvider';
@@ -17,7 +18,10 @@ import { useTheme } from '../../theme/ThemeProvider';
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
 type Props = {
-  label: string;
+  // Usually a plain string — ReactNode is only for a mixed-size label
+  // (e.g. a nested <Text> to size a leading icon differently from the
+  // rest of the text, both still inheriting this Text's own color/font).
+  label: ReactNode;
   onPress: () => void;
   variant?: Variant;
   disabled?: boolean;

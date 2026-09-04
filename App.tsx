@@ -113,6 +113,16 @@ function AppContent() {
     setTimeout(() => setLinkCopied(false), 1500);
   }, []);
 
+  // Stable identity across re-renders (e.g. a theme toggle, which
+  // re-renders AppContent via useTheme()) — passed down as a prop to
+  // TableHome/PlayerAccountsScreen/etc., which each rebuild their own
+  // load() callback whenever this reference changes and re-run it in a
+  // useEffect. An inline `() => auth.getAccessToken()` here would get a
+  // new identity every render, silently re-triggering every mounted
+  // screen's data load (and, per GoogleAuthProvider#getAccessToken, a
+  // redundant native signInSilently() call) on any unrelated re-render.
+  const getAccessToken = useCallback(() => auth.getAccessToken(), []);
+
   const [selectedSpreadsheetId, setSelectedSpreadsheetId] = useState<string | null>(null);
   const [showAccountsScreen, setShowAccountsScreen] = useState(false);
   const [showAllPlayers, setShowAllPlayers] = useState(false);
@@ -416,7 +426,7 @@ function AppContent() {
   if (showAccountsScreen) {
     return (
       <LinearGradient colors={theme.gradients.background} style={styles.container}>
-        <PlayerAccountsScreen userId={user.id} getAccessToken={() => auth.getAccessToken()} onBack={() => setShowAccountsScreen(false)} />
+        <PlayerAccountsScreen userId={user.id} getAccessToken={getAccessToken} onBack={() => setShowAccountsScreen(false)} />
         <StatusBar style={theme.statusBarStyle} />
       </LinearGradient>
     );
@@ -437,7 +447,7 @@ function AppContent() {
             </Pressable>
           </View>
         </View>
-        <TableHome spreadsheetId={selectedSpreadsheetId} userId={user.id} getAccessToken={() => auth.getAccessToken()} />
+        <TableHome spreadsheetId={selectedSpreadsheetId} userId={user.id} getAccessToken={getAccessToken} />
         <StatusBar style={theme.statusBarStyle} />
       </LinearGradient>
     );
@@ -448,7 +458,7 @@ function AppContent() {
       <LinearGradient colors={theme.gradients.background} style={styles.container}>
         <AllPlayersScreen
           tables={tables ?? []}
-          getAccessToken={() => auth.getAccessToken()}
+          getAccessToken={getAccessToken}
           hostEmail={user.email ?? ''}
           onBack={() => setShowAllPlayers(false)}
           onOpenAccounts={() => {

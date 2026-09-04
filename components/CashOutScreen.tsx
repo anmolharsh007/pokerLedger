@@ -171,7 +171,15 @@ export default function CashOutScreen({ gameInfo, spreadsheetId, getAccessToken,
         </View>
       )}
 
-      <Button label="Table screen" variant="secondary" onPress={onBack} />
+      <Button
+        label={
+          <>
+            <Text style={{ fontSize: theme.font.size.lg }}>↩</Text> Table screen
+          </>
+        }
+        variant="secondary"
+        onPress={onBack}
+      />
 
       <DoubleTapButton label="Cash out" armedLabel="Tap again to cash out" onConfirm={handleCashOut} />
 

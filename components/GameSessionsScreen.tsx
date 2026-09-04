@@ -242,7 +242,16 @@ export default function GameSessionsScreen({ players, spreadsheetId, getAccessTo
 
       <View style={styles.footerActions}>
         <Button label="🏆 Leaderboard" variant="secondary" onPress={() => setShowLeaderboard(true)} style={styles.flexBtn} />
-        <Button label="Table screen" variant="secondary" onPress={onBack} style={styles.flexBtn} />
+        <Button
+          label={
+            <>
+              <Text style={{ fontSize: theme.font.size.lg }}>↩</Text> Table screen
+            </>
+          }
+          variant="secondary"
+          onPress={onBack}
+          style={styles.flexBtn}
+        />
       </View>
     </ScrollView>
   );

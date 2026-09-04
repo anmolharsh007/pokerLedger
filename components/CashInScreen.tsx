@@ -159,7 +159,15 @@ export default function CashInScreen({ players, gameInfo, spreadsheetId, getAcce
         </View>
       )}
 
-      <Button label="Table screen" variant="secondary" onPress={onBack} />
+      <Button
+        label={
+          <>
+            <Text style={{ fontSize: theme.font.size.lg }}>↩</Text> Table screen
+          </>
+        }
+        variant="secondary"
+        onPress={onBack}
+      />
 
       <DoubleTapButton label="Add" armedLabel="Tap again to add" onConfirm={handleAdd} />
     </ScrollView>

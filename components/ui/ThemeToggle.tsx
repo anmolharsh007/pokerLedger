@@ -44,7 +44,18 @@ export default function ThemeToggle() {
               { borderRadius: theme.radius.pill },
               active && { backgroundColor: optionTheme.colors.accent },
             ]}>
-            <Text style={[styles.icon, { color: active ? optionTheme.colors.accentText : inactiveColor }]}>
+            <Text
+              style={[
+                styles.icon,
+                // Spade is sized down from the shared base and set in
+                // the app's own serif (Cormorant Garamond, used
+                // everywhere else) instead of the system font — a
+                // sharper point, more-curved lobes than the system
+                // glyph gave it. Diamond is sized up a touch from the
+                // same base to balance the pair.
+                optionTheme.isDark ? [styles.iconSpade, { fontFamily: theme.font.family.bold }] : styles.iconDiamond,
+                { color: active ? optionTheme.colors.accentText : inactiveColor },
+              ]}>
               {optionTheme.isDark ? '♠' : '♢'}
             </Text>
           </Pressable>
@@ -58,4 +69,6 @@ const styles = StyleSheet.create({
   track: { flexDirection: 'row', padding: 3, gap: 3 },
   segment: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
   icon: { fontSize: 14 },
+  iconSpade: { fontSize: 10 }, // smaller still than the diamond
+  iconDiamond: { fontSize: 15 }, // 14 * 1.09, rounded — ~9% bigger than the shared base
 });
