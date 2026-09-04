@@ -10,6 +10,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 
 import { createClaim, parseClaimQr } from '../lib/claimsApi';
+import BrandHeader from './ui/BrandHeader';
 
 type Props = { onBack: () => void };
 
@@ -62,6 +63,7 @@ export default function ScanClaimScreen({ onBack }: Props) {
 
   return (
     <View style={{ flex: 1 }}>
+      <BrandHeader />
       <View style={styles.header}>
         <Pressable onPress={onBack}>
           <Text style={styles.backLinkText}>‹ Tables</Text>

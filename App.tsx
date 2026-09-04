@@ -10,9 +10,11 @@ import AllPlayersScreen from './components/AllPlayersScreen';
 import PlayerAccountsScreen from './components/PlayerAccountsScreen';
 import ScanClaimScreen from './components/ScanClaimScreen';
 import TableHome from './components/TableHome';
+import BrandHeader from './components/ui/BrandHeader';
 import Button from './components/ui/Button';
 import Card from './components/ui/Card';
 import CardButton from './components/ui/CardButton';
+import IconButton from './components/ui/IconButton';
 import ModalCard from './components/ui/ModalCard';
 import TextField from './components/ui/TextField';
 import ThemeToggle from './components/ui/ThemeToggle';
@@ -115,6 +117,7 @@ function AppContent() {
   const [showAccountsScreen, setShowAccountsScreen] = useState(false);
   const [showAllPlayers, setShowAllPlayers] = useState(false);
   const [showScanClaim, setShowScanClaim] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [verifying, setVerifying] = useState(false);
   // Alert.alert is a no-op on web (react-native-web has no real
   // implementation) — these drive an actual Modal instead, which does
@@ -397,6 +400,7 @@ function AppContent() {
         <View style={[styles.themeToggleFloating, styles.headerActions]}>
           <ThemeToggle />
         </View>
+        <BrandHeader />
         <Text style={styles.title}>Poker Ledger</Text>
         <Text style={styles.subtitle}>Sign in to load your tables.</Text>
         <Button label="Sign in with Google" onPress={handleSignIn} loading={signingIn} style={styles.signInBtn} />
@@ -421,6 +425,7 @@ function AppContent() {
   if (selectedSpreadsheetId) {
     return (
       <LinearGradient colors={theme.gradients.background} style={styles.container}>
+        <BrandHeader />
         <View style={styles.header}>
           <Pressable onPress={() => setSelectedSpreadsheetId(null)}>
             <Text style={styles.backText}>‹ Tables</Text>
@@ -467,6 +472,7 @@ function AppContent() {
 
   return (
     <LinearGradient colors={theme.gradients.background} style={styles.container}>
+      <BrandHeader />
       <View style={styles.header}>
         <Text style={styles.title}>{user.displayName || user.email || 'Poker Ledger'}</Text>
         <View style={styles.headerActions}>
@@ -474,20 +480,16 @@ function AppContent() {
           <Pressable onPress={() => setShowScanClaim(true)}>
             <Text style={styles.headerLinkText}>Scan</Text>
           </Pressable>
-          {/* Players and Player Accounts used to be two separate header
-              buttons — merged into one entry point. AllPlayersScreen
-              (the cross-table roster + QR-claim flow) carries a small
-              link of its own through to PlayerAccountsScreen (the
-              global reusable-profile directory) instead. */}
-          <Pressable onPress={() => setShowAllPlayers(true)}>
-            <Text style={styles.headerLinkText}>Players</Text>
-          </Pressable>
           <Pressable style={styles.refreshBtn} onPress={loadTables} onLongPress={handleVerifySheets} delayLongPress={500}>
             {verifying ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text style={styles.refreshBtnText}>⟳</Text>}
           </Pressable>
-          <Pressable onPress={handleSignOut}>
-            <Text style={styles.signOutText}>Sign out</Text>
-          </Pressable>
+          {/* Players and Sign out live behind the overflow menu now —
+              Theme/Scan/Refresh stay as quick-access always-visible
+              actions. AllPlayersScreen (the cross-table roster +
+              QR-claim flow) carries a small link of its own through to
+              PlayerAccountsScreen (the global reusable-profile
+              directory), same as before. */}
+          <IconButton icon="⋮" onPress={() => setShowMenu(true)} />
         </View>
       </View>
 
@@ -589,6 +591,25 @@ function AppContent() {
             </View>
           </Card>
         )}
+      </ModalCard>
+
+      <ModalCard visible={showMenu} onRequestClose={() => setShowMenu(false)}>
+        <Pressable
+          style={styles.menuItem}
+          onPress={() => {
+            setShowMenu(false);
+            setShowAllPlayers(true);
+          }}>
+          <Text style={styles.menuItemText}>Players</Text>
+        </Pressable>
+        <Pressable
+          style={styles.menuItem}
+          onPress={() => {
+            setShowMenu(false);
+            handleSignOut();
+          }}>
+          <Text style={[styles.menuItemText, styles.signOutText]}>Sign out</Text>
+        </Pressable>
       </ModalCard>
 
       <ModalCard visible={verifyMessage !== null} onRequestClose={() => setVerifyMessage(null)}>
@@ -724,5 +745,11 @@ const createStyles = (theme: Theme) =>
       fontSize: theme.font.size.sm,
       fontFamily: theme.font.family.regular,
       color: theme.colors.textSecondary,
+    },
+    menuItem: { paddingVertical: 12 },
+    menuItemText: {
+      fontSize: theme.font.size.md,
+      fontFamily: theme.font.family.medium, fontWeight: theme.font.weight.medium,
+      color: theme.colors.textPrimary,
     },
   });

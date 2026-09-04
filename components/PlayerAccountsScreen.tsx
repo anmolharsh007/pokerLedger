@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import BrandHeader from './ui/BrandHeader';
 import Button from './ui/Button';
 import Card from './ui/Card';
 import IconButton from './ui/IconButton';
@@ -73,6 +74,7 @@ export default function PlayerAccountsScreen({ userId, getAccessToken, onBack }:
 
   return (
     <View style={{ flex: 1 }}>
+      <BrandHeader />
       <Pressable style={({ pressed }) => [styles.backLink, pressed && styles.pressedDim]} onPress={onBack}>
         <Text style={styles.backLinkText}>‹ Tables</Text>
       </Pressable>

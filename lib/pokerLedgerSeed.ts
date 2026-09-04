@@ -110,7 +110,7 @@ export const TABS = {
 } as const;
 
 export const pokerLedgerSeed: SheetSeed = {
-  tabs: [TABS.playersInfo, TABS.groupsInfo, TABS.netResults, TABS.sessionLog, TABS.leaderboard, TABS.sumCheck, TABS.tableInfo],
+  tabs: [TABS.sessionLog, TABS.playersInfo, TABS.groupsInfo, TABS.netResults, TABS.leaderboard, TABS.sumCheck, TABS.tableInfo],
   values: [
     { range: `${TABS.playersInfo}!A1:C1`, values: [['Player name', 'Player email', 'Alias']] },
     { range: `${TABS.netResults}!A1:B1`, values: [['Player name', 'Total']] },

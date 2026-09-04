@@ -13,6 +13,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { buildClaimQrPayload, type ClaimEntry } from '../lib/claimsApi';
 import { PokerLedgerService } from '../lib/pokerActions';
 import type { LinkedSheet } from '../lib/sheetRegistry';
+import BrandHeader from './ui/BrandHeader';
 
 type PlayerRow = { spreadsheetId: string; tableName: string; email: string };
 
@@ -79,6 +80,7 @@ export default function AllPlayersScreen({ tables, getAccessToken, hostEmail, on
 
   return (
     <View style={{ flex: 1 }}>
+      <BrandHeader />
       <View style={styles.header}>
         <Pressable onPress={onBack}>
           <Text style={styles.backLinkText}>‹ Tables</Text>
