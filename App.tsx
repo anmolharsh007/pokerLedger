@@ -1,4 +1,5 @@
 import { CormorantGaramond_400Regular, CormorantGaramond_500Medium, CormorantGaramond_700Bold, useFonts } from '@expo-google-fonts/cormorant-garamond';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -10,6 +11,7 @@ import PlayerAccountsScreen from './components/PlayerAccountsScreen';
 import ScanClaimScreen from './components/ScanClaimScreen';
 import TableHome from './components/TableHome';
 import Button from './components/ui/Button';
+import Card from './components/ui/Card';
 import CardButton from './components/ui/CardButton';
 import ModalCard from './components/ui/ModalCard';
 import TextField from './components/ui/TextField';
@@ -29,6 +31,11 @@ import { ThemeProvider, useTheme } from './theme/ThemeProvider';
 import type { Theme } from './theme/tokens';
 
 const auth = new GoogleAuthProvider();
+
+/** The real Google Sheet a table's spreadsheetId points at — same URL shape `open in Sheets` links use elsewhere in Google's own UI. */
+function sheetLinkFor(spreadsheetId: string): string {
+  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+}
 
 // Keeps the native splash up until the app's one font (theme/tokens.ts's
 // font.family — Cormorant Garamond, throughout) is ready, so nothing
@@ -89,6 +96,20 @@ function AppContent() {
   const [creatingTable, setCreatingTable] = useState(false);
   const [newTableName, setNewTableName] = useState('');
   const [showNewTableForm, setShowNewTableForm] = useState(false);
+
+  // Long-press on a table card (App.tsx's own home-screen grid, not
+  // TableHome) — a read-only popup shaped like the card itself, just to
+  // grab the underlying Google Sheet's link. `index` is carried along so
+  // the popup's tint matches the exact card that was pressed
+  // (cardTintFor(i) is positional, not derived from the table itself).
+  const [infoTable, setInfoTable] = useState<{ table: LinkedSheet; index: number } | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const handleCopyLink = useCallback(async (spreadsheetId: string) => {
+    await Clipboard.setStringAsync(sheetLinkFor(spreadsheetId));
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 1500);
+  }, []);
 
   const [selectedSpreadsheetId, setSelectedSpreadsheetId] = useState<string | null>(null);
   const [showAccountsScreen, setShowAccountsScreen] = useState(false);
@@ -489,6 +510,11 @@ function AppContent() {
                 <View key={table.id} style={{ width: tableCardWidth }}>
                   <CardButton
                     onPress={() => setSelectedSpreadsheetId(table.spreadsheetId)}
+                    onLongPress={() => {
+                      setLinkCopied(false);
+                      setInfoTable({ table, index: i });
+                    }}
+                    delayLongPress={500}
                     tint={cardTintFor(i)}
                     // Same format as Group+'s cards — the identical gold
                     // badge chip Group+ uses for "GROUP", straddling the
@@ -545,6 +571,25 @@ function AppContent() {
           )}
         </ScrollView>
       )}
+
+      {/* Long-press popup — the table card itself (same tint/badge/shape
+          as the home-screen grid), just with its Google Sheet link
+          added below the name. contentStyle strips ModalCard's own
+          card chrome (border/padding/background) so this Card is the
+          only visible "card" — no card-inside-a-card look. */}
+      <ModalCard visible={infoTable !== null} onRequestClose={() => setInfoTable(null)} contentStyle={styles.tableInfoModalContent}>
+        {infoTable && (
+          <Card portrait tint={cardTintFor(infoTable.index)} badge="TABLE" style={styles.tableCard}>
+            <View style={styles.tableCardBody}>
+              <Text style={styles.tableCardName} numberOfLines={2}>
+                {tableSummaries[infoTable.table.spreadsheetId]?.[0] || infoTable.table.name}
+              </Text>
+              <TextField value={sheetLinkFor(infoTable.table.spreadsheetId)} editable={false} multiline style={styles.sheetLinkField} />
+              <Button label={linkCopied ? 'Copied!' : 'Copy link'} variant="secondary" onPress={() => handleCopyLink(infoTable.table.spreadsheetId)} />
+            </View>
+          </Card>
+        )}
+      </ModalCard>
 
       <ModalCard visible={verifyMessage !== null} onRequestClose={() => setVerifyMessage(null)}>
         <Text style={styles.modalTitle}>Verified</Text>
@@ -658,6 +703,15 @@ const createStyles = (theme: Theme) =>
     tableCardBody: { gap: 8 },
     // Card text sized up 30% (same bump app-wide).
     tableCardName: { fontSize: theme.font.size.xl * 1.3, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textPrimary, textAlign: 'center' },
+    // Strips ModalCard's own card chrome down to just the Modal/backdrop
+    // plumbing — the nested Card (long-press popup, above) supplies all
+    // the actual visible framing, so this doesn't double up into a
+    // card-inside-a-card look. GradientSurface (ModalCard's own faint
+    // background wash) still renders regardless, since it's unaffected
+    // by these overrides — that's what keeps the transparent Card from
+    // looking unfilled against the modal backdrop.
+    tableInfoModalContent: { backgroundColor: 'transparent', borderWidth: 0, padding: 0, shadowOpacity: 0, elevation: 0 },
+    sheetLinkField: { fontSize: theme.font.size.xs, textAlign: 'center' },
     newTableForm: { gap: 10 },
     newTableActions: { flexDirection: 'row', gap: 10 },
     flexBtn: { flex: 1 },

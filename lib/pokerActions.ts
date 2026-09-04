@@ -16,12 +16,18 @@
  * yet unified with) pokerTypes.ts's richer Player struct, which is
  * for the not-yet-built live-game flow (Table.currentGame etc).
  */
+import { headerFormatRequest } from './appSheet';
 import { batchUpdateSpreadsheet, batchUpdateValues, getSpreadsheetMeta, getValues } from './googleSheetsApi';
 import { SheetData, type ValueV } from './pokerTypes';
-import { TABS } from './pokerLedgerSeed';
+import { PLAYER_HEADER_STYLE, TABS } from './pokerLedgerSeed';
 
 const SESSION_LOG_FIRST_PLAYER_COL = 3; // 0-indexed: column D (A=0, B=1, C=2)
 const SESSION_LOG_COLS_PER_PLAYER = 2;
+// Same row cap listPlayers/listGroups/addGroup already read or grow up
+// to elsewhere in this file (their own literal '200's, not centralized
+// through this constant) — reused here as leaderboard's RANK() range
+// bound, wide enough that it never needs rewriting as players join.
+const MAX_PLAYER_ROWS = 200;
 const DEFAULT_GRID_COLUMNS = 26; // Sheets' default new-sheet column count (A–Z)
 const DEFAULT_GRID_ROWS = 1000; // Sheets' default new-sheet row count
 // session-log's player columns have a 2-row header (row 1 = merged
@@ -167,6 +173,17 @@ export class PokerLedgerService {
             mergeType: 'MERGE_ALL',
           },
         },
+        // This player's 2-column block falls outside the seed's own
+        // header formatting (pokerLedgerSeed.ts#headerFormat) since
+        // it's appended after creation, so it needs its own request —
+        // both header rows (merged name + the Buy-ins(#)/Final chips
+        // sub-headers below it). PLAYER_HEADER_STYLE, not HEADER_STYLE:
+        // the reference sheet this was matched against uses a distinct
+        // orange tone for session-log's per-player columns, setting
+        // them apart from the sheet's fixed (Date/ratio/Buy-in) ones.
+        headerFormatRequest(sessionLogSheetId, 2, endCol - startCol, PLAYER_HEADER_STYLE, {
+          startColumnIndex: startCol,
+        }),
       ],
       accessToken
     );
@@ -185,6 +202,25 @@ export class PokerLedgerService {
       `${q(TABS.sessionLog)}!C${SESSION_DATA_FIRST_ROW}:C5000)`;
     const nameLinkFormula = `=${q(TABS.playersInfo)}!A${playerRow}`;
 
+    // leaderboard row, grown in the same lockstep as players-info/
+    // net-results above (same playerRow) — see pokerLedgerSeed.ts's
+    // module comment for what each column means. Net winnings just
+    // links net-results' own Total rather than re-deriving it from
+    // session-log directly (unlike Sessions played/Total buy-ins/Total
+    // staked, which do read session-log — net-results doesn't carry a
+    // per-session count/buy-ins breakdown to source those from).
+    const sessionsPlayedFormula = `=COUNTIF(${q(TABS.sessionLog)}!${buyInsLetter}${SESSION_DATA_FIRST_ROW}:${buyInsLetter}5000,">0")`;
+    const totalBuyInsFormula = `=SUM(${q(TABS.sessionLog)}!${buyInsLetter}${SESSION_DATA_FIRST_ROW}:${buyInsLetter}5000)`;
+    // Same "buy-ins × that session's own Buy-in(₹) amount" SUMPRODUCT
+    // term totalFormula above already computes and subtracts — total
+    // staked is that term on its own, not netted against cash-outs.
+    const totalStakedFormula = `=SUMPRODUCT(${q(TABS.sessionLog)}!${buyInsLetter}${SESSION_DATA_FIRST_ROW}:${buyInsLetter}5000,${q(TABS.sessionLog)}!C${SESSION_DATA_FIRST_ROW}:C5000)`;
+    const netWinningsFormula = `=${q(TABS.netResults)}!B${playerRow}`;
+    // MAX_PLAYER_ROWS (200) — same cap listPlayers/listGroups already
+    // read rows up to elsewhere in this file. Column E (Net winnings),
+    // now that Total staked occupies D.
+    const rankFormula = `=RANK(E${playerRow},$E$2:$E${MAX_PLAYER_ROWS})`;
+
     // Everything else is a plain value write — formulas included, since
     // the Sheets API interprets a leading "=" as a formula under
     // valueInputOption=USER_ENTERED (what writeValue(s) uses).
@@ -198,6 +234,12 @@ export class PokerLedgerService {
         { value: nameLinkFormula, sheetData: new SheetData(1, buyInsLetter, TABS.sessionLog) },
         { value: 'Buy-ins(#)', sheetData: new SheetData(2, buyInsLetter, TABS.sessionLog) },
         { value: 'Final chips', sheetData: new SheetData(2, finalChipsLetter, TABS.sessionLog) },
+        { value: nameLinkFormula, sheetData: new SheetData(playerRow, 'A', TABS.leaderboard) },
+        { value: sessionsPlayedFormula, sheetData: new SheetData(playerRow, 'B', TABS.leaderboard) },
+        { value: totalBuyInsFormula, sheetData: new SheetData(playerRow, 'C', TABS.leaderboard) },
+        { value: totalStakedFormula, sheetData: new SheetData(playerRow, 'D', TABS.leaderboard) },
+        { value: netWinningsFormula, sheetData: new SheetData(playerRow, 'E', TABS.leaderboard) },
+        { value: rankFormula, sheetData: new SheetData(playerRow, 'F', TABS.leaderboard) },
       ],
       accessToken
     );

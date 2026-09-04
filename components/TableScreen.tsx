@@ -1,24 +1,25 @@
 /**
  * This project's own screen (not sheet-ui's generic Config-tab
  * renderer — see lib/pokerLedgerSeed.ts for why). Shows the current
- * player roster, the "use alias" display toggle for this table, and
- * lets you add a player from a global account (lib/playerAccounts.ts)
- * — pick an existing one or create a new one inline — exercising
- * lib/pokerActions.ts#addPlayer end to end: players-info gets a new
- * row, net-results a formula-linked row, session-log a new merged
- * 2-column block. Since every account carries a real email, adding one
- * also grants them real Drive access (lib/googleDriveApi.ts#grantPermission)
- * and writes the cross-table discovery-index entry
- * (lib/accountsApi.ts#inviteToAccount) — same two effects
- * components/AllPlayersScreen.tsx's QR-claim flow produces for a
- * name-only player once their email is filled in later.
+ * player roster (respecting the table's "use alias" display flag, set
+ * elsewhere — lib/pokerActions.ts#setUseAlias — this screen has no UI
+ * to toggle it itself) and lets you add a player from a global account
+ * (lib/playerAccounts.ts) — pick an existing one or create a new one
+ * inline — exercising lib/pokerActions.ts#addPlayer end to end:
+ * players-info gets a new row, net-results a formula-linked row,
+ * session-log a new merged 2-column block. Since every account carries
+ * a real email, adding one also grants them real Drive access
+ * (lib/googleDriveApi.ts#grantPermission) and writes the cross-table
+ * discovery-index entry (lib/accountsApi.ts#inviteToAccount) — same
+ * two effects components/AllPlayersScreen.tsx's QR-claim flow produces
+ * for a name-only player once their email is filled in later.
  *
  * Doesn't fetch its own roster — all worksheet data is read once,
  * when the table is opened (TableHome.tsx's load()), and handed down
- * as props. After a mutation (adding a player, toggling use-alias)
- * this calls `onChanged` so the parent re-reads from the sheet, rather
- * than re-fetching here itself. Accounts are this screen's own local
- * state though, since they're global (not part of the table's sheet).
+ * as props. After a mutation (adding a player) this calls `onChanged`
+ * so the parent re-reads from the sheet, rather than re-fetching here
+ * itself. Accounts are this screen's own local state though, since
+ * they're global (not part of the table's sheet).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -52,8 +53,6 @@ export default function TableScreen({ spreadsheetId, userId, tableName, getAcces
   const [error, setError] = useState<string | null>(null);
   const useAlias = tableInfo?.useAlias ?? false;
 
-  const [togglingAlias, setTogglingAlias] = useState(false);
-
   const [accounts, setAccounts] = useState<PlayerAccount[] | null>(null);
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState(false);
@@ -78,20 +77,6 @@ export default function TableScreen({ spreadsheetId, userId, tableName, getAcces
   useEffect(() => {
     loadAccounts();
   }, [loadAccounts]);
-
-  const handleToggleAlias = async () => {
-    setTogglingAlias(true);
-    setError(null);
-    try {
-      const accessToken = await getAccessToken();
-      await service.setUseAlias(!useAlias, accessToken);
-      await onChanged();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setTogglingAlias(false);
-    }
-  };
 
   // Real Drive access + the cross-table discovery-index write — same
   // two effects components/AllPlayersScreen.tsx's QR-claim flow
@@ -157,15 +142,7 @@ export default function TableScreen({ spreadsheetId, userId, tableName, getAcces
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.headerRow}>
         <Text style={styles.sectionTitle}>Players</Text>
-        <View style={styles.headerActions}>
-          <Pressable
-            style={[styles.aliasToggle, useAlias && styles.aliasToggleActive]}
-            disabled={togglingAlias}
-            onPress={handleToggleAlias}>
-            <Text style={styles.aliasToggleText}>Use alias</Text>
-          </Pressable>
-          <IconButton icon="⟳" onPress={onChanged} />
-        </View>
+        <IconButton icon="⟳" onPress={onChanged} />
       </View>
       {players.length === 0 ? (
         <Text style={styles.empty}>No players yet.</Text>
@@ -231,19 +208,6 @@ const createStyles = (theme: Theme) =>
     content: { padding: 20, gap: 12 },
     error: { color: theme.colors.danger, textAlign: 'center', marginBottom: 12 },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    aliasToggle: {
-      paddingVertical: 6,
-      paddingHorizontal: 10,
-      borderRadius: theme.radius.pill,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      minWidth: 74,
-      alignItems: 'center',
-    },
-    // On: a thicker accent border instead of a fill — still border only.
-    aliasToggleActive: { borderWidth: 2, borderColor: theme.colors.accent },
-    aliasToggleText: { fontSize: theme.font.size.xs, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.accent },
     sectionTitle: { fontSize: theme.font.size.md, fontFamily: theme.font.family.bold, fontWeight: theme.font.weight.bold, color: theme.colors.textSecondary, marginTop: 8 },
     empty: { color: theme.colors.textSecondary, textAlign: 'center', marginVertical: 12 },
     playerRow: {

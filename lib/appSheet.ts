@@ -21,8 +21,10 @@
  * has is tracked in a local-device registry (lib/sheetRegistry.ts).
  */
 import { moveFileToFolder, resolveAppFolder } from './googleDriveApi';
-import { batchUpdateValues, createSpreadsheet } from './googleSheetsApi';
+import { batchUpdateSpreadsheet, batchUpdateValues, createSpreadsheet, getSpreadsheetMeta } from './googleSheetsApi';
 import { addLinkedSheet, listLinkedSheets, type LinkedSheet } from './sheetRegistry';
+
+export type RGBColor = { red: number; green: number; blue: number }; // 0..1 float components, as the Sheets API expects
 
 export type SheetSeed = {
   tabs: string[]; // e.g. ['Data', 'Config']
@@ -34,7 +36,63 @@ export type SheetSeed = {
    * caller — this project's own demo seed leaves it empty.
    */
   listColumns?: Array<{ label: string; cell: string }>;
+  /**
+   * Optional header-row color formatting applied once, right after the
+   * tabs are created — `style` (fill/text/border) on the top-left
+   * corner of each listed tab. `ranges` names which tabs get it and how
+   * big their header block is (rows/cols from A1); a tab omitted here
+   * is left unformatted (e.g. a tab with no defined header shape yet).
+   * A tab whose header later grows past this initial block (a new
+   * column appended structurally, say) needs its own follow-up
+   * headerFormatRequest call from the caller that grows it — this only
+   * covers the shape known at creation time.
+   */
+  headerFormat?: {
+    style: HeaderStyle;
+    ranges: Record<string, { rowCount: number; colCount: number }>;
+  };
 };
+
+export type HeaderStyle = {
+  backgroundColor: RGBColor;
+  textColor: RGBColor;
+  borderColor: RGBColor;
+  fontFamily?: string; // defaults to the sheet's own default font if omitted
+};
+
+/** Builds the repeatCell request `headerFormat` describes for one tab — shared with callers that grow a header later (e.g. addPlayer appending session-log columns). */
+export function headerFormatRequest(
+  sheetId: number,
+  rowCount: number,
+  colCount: number,
+  style: HeaderStyle,
+  opts?: { startColumnIndex?: number }
+): unknown {
+  const startColumnIndex = opts?.startColumnIndex ?? 0;
+  const border = { style: 'SOLID', color: style.borderColor };
+  return {
+    repeatCell: {
+      range: {
+        sheetId,
+        startRowIndex: 0,
+        endRowIndex: rowCount,
+        startColumnIndex,
+        endColumnIndex: startColumnIndex + colCount,
+      },
+      cell: {
+        userEnteredFormat: {
+          backgroundColor: style.backgroundColor,
+          textFormat: { foregroundColor: style.textColor, bold: true, fontFamily: style.fontFamily },
+          horizontalAlignment: 'CENTER',
+          verticalAlignment: 'MIDDLE',
+          wrapStrategy: 'WRAP',
+          borders: { top: border, bottom: border, left: border, right: border },
+        },
+      },
+      fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy,borders)',
+    },
+  };
+}
 
 /** Creates a brand-new app sheet: files it under the app's Drive folder, seeds it, and links it to this user. */
 export async function createAppSheet(
@@ -52,6 +110,20 @@ export async function createAppSheet(
   await moveFileToFolder(spreadsheetId, folderId, accessToken);
   if (opts.seed.values.length > 0) {
     await batchUpdateValues(spreadsheetId, opts.seed.values, accessToken);
+  }
+  if (opts.seed.headerFormat) {
+    const { style, ranges } = opts.seed.headerFormat;
+    const meta = await getSpreadsheetMeta(spreadsheetId, accessToken);
+    const requests = Object.entries(ranges)
+      .map(([tabTitle, { rowCount, colCount }]) => {
+        const sheet = meta.sheets.find((s) => s.properties.title === tabTitle);
+        if (!sheet) return null; // tab named in headerFormat but missing from seed.tabs — skip rather than fail table creation over cosmetics
+        return headerFormatRequest(sheet.properties.sheetId, rowCount, colCount, style);
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+    if (requests.length > 0) {
+      await batchUpdateSpreadsheet(spreadsheetId, requests, accessToken);
+    }
   }
   await addLinkedSheet(userId, { name: opts.displayName ?? opts.sheetName, spreadsheetId });
   return { spreadsheetId, folderId };
